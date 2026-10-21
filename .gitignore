@@ -1,0 +1,41 @@
+# ───────────────────────────────── macOS ─────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ──────────────────────── Xcode — user-specific state ────────────────────
+# (Shared schemes and Package.resolved under xcshareddata are intentionally kept.)
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.xccheckout
+*.moved-aside
+
+# ──────────────────────────── Build output ───────────────────────────────
+build/
+DerivedData/
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# ──────────────────── Swift Package Manager (local only) ──────────────────
+.build/
+.swiftpm/
+Packages/
+# NOTE: SkillSwap.xcodeproj/.../xcshareddata/swiftpm/Package.resolved is kept
+# (it pins dependency versions for reproducible builds).
+
+# ─────────────── Environment / local secrets (future-proofing) ───────────
+# No secrets are committed today; this keeps it that way going forward.
+*.env
+.env
+.env.*
+Secrets.plist
+secrets.*
+*.p12
+*.pem
+*.mobileprovision
+
+# ───────────────────────────── Misc / temp ───────────────────────────────
+*.log
+*.tmp
