@@ -144,7 +144,7 @@ struct ScheduleSessionView: View {
             .background(Theme.surface).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
             if attemptedSubmit && !dateIsFuture {
-                validationText("Choose a date and time in the future.")
+                validationText("This time has passed. Choose a later time or another day.")
             }
         }
     }
@@ -216,7 +216,7 @@ struct ScheduleSessionView: View {
             .background(Theme.surface).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
             if attemptedSubmit && !detailsFilled {
-                validationText(selectedFormat == .online ? "Add a meeting link." : "Add a meeting location.")
+                validationText(selectedFormat == .online ? "Paste the link your partner will use to join." : "Enter where you and your partner will meet.")
             }
         }
     }
@@ -257,7 +257,9 @@ struct ScheduleSessionView: View {
                 showConfirmation = true
             } catch {
                 isSubmitting = false
-                submitError = "We couldn't propose this session. Please try again."
+                submitError = dateIsFuture
+                    ? "We couldn't send your proposal. Try again."
+                    : "This time has passed. Choose a later time and try again."
             }
         }
     }

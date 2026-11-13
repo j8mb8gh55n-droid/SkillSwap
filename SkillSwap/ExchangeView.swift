@@ -2,9 +2,7 @@
 //  ExchangeView.swift
 //  SkillSwap
 //
-//  My Exchanges — minimalist, student-centered redesign. Driven by real
-//  Supabase data (ExchangeService, read-only) with a clearly-marked demo
-//  fallback until the write-flow creates rows. Matches Home/Explore.
+//  Pending and active exchanges backed by Supabase.
 //
 
 import SwiftUI
@@ -21,6 +19,8 @@ struct ExchangeView: View {
     @State private var summaries: [ExchangeSummary] = []
     @State private var isLoading = true
     @State private var didLoad = false
+    @State private var isRefreshing = false
+    @State private var loadFailed = false
     @State private var filter: ExchangeFilter = .active
 
     private let service = ExchangeService()
@@ -35,11 +35,8 @@ struct ExchangeView: View {
         summaries.filter { $0.status == .completed || $0.status == .cancelled || $0.status == .declined }
     }
 
-    private var listed: [ExchangeSummary] {
-        switch filter {
-        case .requests: return summaries.filter { $0.status == .pending }
-        case .active:   return summaries.filter { $0.status == .accepted }
-        }
+    private var pendingRequests: [ExchangeSummary] {
+        summaries.filter { $0.status == .pending }
     }
 
     /// Default category: Active if any, else Requests.
@@ -63,9 +60,12 @@ struct ExchangeView: View {
                         header
                         if isLoading {
                             loadingRow
+                        } else if loadFailed && summaries.isEmpty {
+                            loadErrorState
                         } else if summaries.isEmpty {
                             firstRunEmptyState
                         } else {
+                            if loadFailed { loadErrorState }
                             segmentedControl
                             swapsSection
                         }
@@ -88,13 +88,25 @@ struct ExchangeView: View {
         .onAppear { Task { await reload() } }
     }
 
-    /// Loads real exchanges from Supabase. No demo/mock fallback — empty is
-    /// shown honestly via the empty state.
     private func reload() async {
-        let real = (try? await service.fetchMyExchanges()) ?? []
-        summaries = real
-        if !didLoad { filter = defaultFilter(); didLoad = true }
-        isLoading = false
+        guard !isRefreshing else { return }
+        isRefreshing = true
+        isLoading = !didLoad
+        defer {
+            isLoading = false
+            isRefreshing = false
+        }
+
+        do {
+            summaries = try await service.fetchMyExchanges()
+            loadFailed = false
+            if !didLoad {
+                filter = defaultFilter()
+                didLoad = true
+            }
+        } catch {
+            loadFailed = true
+        }
     }
 
     // MARK: - Header
@@ -157,29 +169,67 @@ struct ExchangeView: View {
 
     // MARK: - Swaps list
 
-    private var swapsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            if listed.isEmpty {
-                categoryEmptyState
+    @ViewBuilder private var swapsSection: some View {
+        switch filter {
+        case .requests:
+            VStack(alignment: .leading, spacing: 22) {
+                requestSection("Incoming", items: pendingRequests.filter(\.isIncoming),
+                               emptyMessage: "Requests from other students will appear here.")
+                requestSection("Outgoing", items: pendingRequests.filter { !$0.isIncoming },
+                               emptyMessage: "Requests you send will appear here.")
+            }
+        case .active:
+            let active = summaries.filter { $0.status == .accepted }
+            if active.isEmpty {
+                compactEmpty(title: "No active swaps yet",
+                             message: "Explore skills to start your next exchange.",
+                             showExplore: true)
             } else {
-                ForEach(listed) { item in
-                    DetailsLink(item) { ExchangeCard(summary: item) }
-                }
+                exchangeCards(active)
             }
         }
     }
 
-    @ViewBuilder private var categoryEmptyState: some View {
-        switch filter {
-        case .requests:
-            compactEmpty(title: "No pending requests",
-                         message: "New exchange requests will appear here.",
-                         showExplore: false)
-        case .active:
-            compactEmpty(title: "No active swaps yet",
-                         message: "Explore skills to start your next exchange.",
-                         showExplore: true)
+    private func requestSection(_ title: String, items: [ExchangeSummary], emptyMessage: String) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(title)
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.charcoal)
+                .accessibilityAddTraits(.isHeader)
+            if items.isEmpty {
+                Text(emptyMessage)
+                    .font(Theme.Typography.callout)
+                    .foregroundStyle(Theme.mutedStone)
+            } else {
+                exchangeCards(items)
+            }
         }
+    }
+
+    private func exchangeCards(_ items: [ExchangeSummary]) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            ForEach(items) { item in
+                DetailsLink(item) { ExchangeCard(summary: item) }
+            }
+        }
+    }
+
+    private var loadErrorState: some View {
+        VStack(spacing: 10) {
+            Text("Couldn’t load exchanges")
+                .font(Theme.Typography.title)
+                .foregroundStyle(Theme.charcoal)
+            Text(summaries.isEmpty ? "Check your connection and try again." : "Showing your last loaded exchanges.")
+                .font(Theme.Typography.callout)
+                .foregroundStyle(Theme.mutedStone)
+            Button("Try Again") { Task { await reload() } }
+                .tint(Theme.primaryAction)
+                .disabled(isRefreshing)
+        }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity)
+        .padding(20)
+        .background(Theme.surface.opacity(0.5), in: RoundedRectangle(cornerRadius: Theme.Radius.large))
     }
 
     private func compactEmpty(title: String, message: String, showExplore: Bool) -> some View {

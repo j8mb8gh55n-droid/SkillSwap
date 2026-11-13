@@ -87,7 +87,7 @@ struct ExchangeService {
         var errorDescription: String? {
             switch self {
             case .selfRequest:     return "You can't request an exchange with yourself."
-            case .duplicatePending: return "You already have a pending request for this exchange."
+            case .duplicatePending: return "You already have a pending request with this student. Check Outgoing in Exchanges."
             case .recipientUnavailable: return "This student isn't accepting new exchange requests right now."
             case .rejected(let m): return m
             }
