@@ -16,12 +16,11 @@ struct ProfileView: View {
 
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var savedStudents: SavedStudentsStore
-    @EnvironmentObject private var directory: StudentDirectory
     @StateObject private var store = ProfileStore()
 
     /// Count of VALID saved students (resolvable in the real roster) — matches
     /// exactly what the Saved Students screen shows (stale/mock ids don't count).
-    private var savedCount: Int { directory.students.filter { savedStudents.isSaved($0.id) }.count }
+    private var savedCount: Int { savedStudents.count }
 
     // Verified received-kudos count (Phase D1).
     @State private var kudosCount: Int?
@@ -67,6 +66,7 @@ struct ProfileView: View {
                             if !store.bio.isEmpty { aboutSection }
                             teachingSection
                             learningSection
+                            ProfileCommunitySection(authorID: nil, authorName: displayName)
                             availabilitySection
                             yourImpactCard
                             savedAndKudos
@@ -83,7 +83,6 @@ struct ProfileView: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .task { await store.loadIfNeeded() }
-            .task { await directory.loadIfNeeded() }
             .task { kudosCount = try? await kudosService.myKudosCount() }
             .alert("Couldn't Load Profile", isPresented: Binding(
                 get: { store.loadError != nil }, set: { if !$0 { store.loadError = nil } })) {
@@ -354,8 +353,8 @@ struct ProfileView: View {
 
     private var savedAndKudos: some View {
         VStack(spacing: 0) {
-            NavigationLink { SavedStudentsView() } label: {
-                linkRow(icon: "bookmark", title: "Saved Students",
+            NavigationLink { SavedView() } label: {
+                linkRow(icon: "bookmark", title: "Saved",
                         trailing: savedCount > 0 ? "\(savedCount)" : nil)
             }
             .buttonStyle(.plain)

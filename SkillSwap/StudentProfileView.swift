@@ -4,6 +4,7 @@
 //
 
 import SwiftUI
+import Supabase
 
 struct StudentProfileView: View {
 
@@ -26,10 +27,13 @@ struct StudentProfileView: View {
     /// Present when opened from real discovery — carries the real profile id and
     /// full skill lists (used for display + Phase C exchange requests).
     var discovered: DiscoveredStudent? = nil
+    var returnsToConversation = false
+    var communityAuthorID: UUID? = nil
 
     // MARK: - Environment
 
     @Environment(\.dismiss) private var dismiss
+    @State private var signedInStudentID: UUID?
 
     // Verified aggregate kudos count (Phase D1) — counts only, via RPC.
     @State private var kudosCount: Int?
@@ -73,6 +77,11 @@ struct StudentProfileView: View {
 
                         learningSection
 
+                        if let authorID = communityAuthorID ?? discovered.flatMap({ UUID(uuidString: $0.id) }) {
+                            ProfileCommunitySection(authorID: authorID, authorName: name)
+                                .id(authorID)
+                        }
+
                         availabilitySection
 
                         statsSection
@@ -87,10 +96,16 @@ struct StudentProfileView: View {
             .scrollIndicators(.hidden)
             .ignoresSafeArea(edges: .top)
         }
+        .overlay(alignment: .top) { profileHeaderActions }
         .safeAreaInset(edge: .bottom) {
             exchangeButton
         }
         .toolbar(.hidden, for: .navigationBar)
+        .task(id: discovered?.id) {
+            signedInStudentID = nil
+            guard discovered != nil else { return }
+            signedInStudentID = try? await SupabaseManager.client.auth.session.user.id
+        }
         .task {
             if let id = discovered?.id {
                 kudosCount = try? await exchangeService.kudosCount(studentID: id)
@@ -169,27 +184,60 @@ struct StudentProfileView: View {
                 )
             }
 
-            Button {
-                dismiss()
-            } label: {
-
-                Image(systemName: "arrow.left")
-                    .font(
-                        .system(
-                            size: 17,
-                            weight: .semibold
-                        )
-                    )
-                    .foregroundStyle(ink)
-                    .frame(width: 44, height: 44)
-                    .background(Theme.surface.opacity(0.9))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 20)
-            .padding(.top, 56)
         }
         .frame(height: 200)
+    }
+
+    private var profileHeaderActions: some View {
+        HStack {
+            Button { dismiss() } label: {
+                BackChevron()
+                    .foregroundStyle(ink)
+                    .frame(width: 44, height: 44)
+                    .glassEffect(.regular.interactive(), in: .circle)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Back")
+
+            Spacer()
+
+            if let student = discovered,
+               let recipientID = UUID(uuidString: student.id),
+               let signedInStudentID,
+               recipientID != signedInStudentID {
+                Group {
+                    if returnsToConversation {
+                        Button { dismiss() } label: { messageIcon }
+                    } else {
+                        NavigationLink {
+                            ChatConversationView(conversation: ChatConversation(
+                                participant: ChatParticipant(id: recipientID, name: name, initials: initials, avatarURL: imageURL),
+                                state: .introduction
+                            ))
+                        } label: {
+                            messageIcon
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Message \(name)")
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 4)
+    }
+
+    private var messageIcon: some View {
+        headerIcon("message").foregroundStyle(ink)
+    }
+
+    private func headerIcon(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 17, weight: .semibold))
+            .frame(width: 44, height: 44)
+            .glassEffect(.regular.tint(Theme.softMint.opacity(0.24)).interactive(), in: .circle)
+            .contentShape(Rectangle())
     }
 
     // MARK: - Profile Information
@@ -598,7 +646,7 @@ struct StudentProfileView: View {
 extension StudentProfileView {
     /// Build from a real discovered student (preserves the existing layout;
     /// carries the real id + skills via `discovered`).
-    init(student s: DiscoveredStudent) {
+    init(student s: DiscoveredStudent, returnsToConversation: Bool = false) {
         self.init(
             name: s.name,
             major: s.major,
@@ -609,7 +657,8 @@ extension StudentProfileView {
             bannerColors: HomeGradients.studentPair(abs(s.id.hashValue) % 4),
             imageURL: s.avatarURL,
             localImageName: nil,
-            discovered: s
+            discovered: s,
+            returnsToConversation: returnsToConversation
         )
     }
 }

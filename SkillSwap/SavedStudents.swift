@@ -41,8 +41,7 @@ final class SavedStudentsStore: ObservableObject {
         UserDefaults.standard.set(Array(saved), forKey: userKey)
     }
 
-    /// Raw stored count (may include ids not in the current roster). The UI
-    /// shows the RESOLVED count (ids present in the directory) instead.
+    /// Stored bookmark count, including unavailable profiles.
     var count: Int { saved.count }
 }
 
@@ -51,6 +50,7 @@ final class SavedStudentsStore: ObservableObject {
 struct BookmarkButton: View {
     @EnvironmentObject private var saved: SavedStudentsStore
     let studentID: String
+    var minimumTarget: CGFloat = 32
 
     var body: some View {
         let on = saved.isSaved(studentID)
@@ -60,71 +60,191 @@ struct BookmarkButton: View {
                 .foregroundStyle(Theme.charcoal)
                 .frame(width: 32, height: 32)
                 .background(.ultraThinMaterial, in: Circle())
+                .frame(width: minimumTarget, height: minimumTarget)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(on ? "Remove from saved" : "Save student")
     }
 }
 
-// MARK: - Saved Students destination
+// MARK: - Saved destination
 
-struct SavedStudentsView: View {
+struct SavedView: View {
+    private enum Segment: String, CaseIterable, Identifiable {
+        case students = "Students"
+        case posts = "Posts"
+
+        var id: Self { self }
+    }
+
+    @EnvironmentObject private var router: AppRouter
+    @StateObject private var postStore = CommunityStore()
+    @State private var segment: Segment = .students
+    @State private var selectedPost: UUID?
     @EnvironmentObject private var saved: SavedStudentsStore
-    @EnvironmentObject private var directory: StudentDirectory
     @Environment(\.dismiss) private var dismiss
 
-    // Local bookmarks (UserDefaults) resolved against the real directory.
-    private var students: [DiscoveredStudent] { directory.students.filter { saved.isSaved($0.id) } }
+    @State private var profiles: [DiscoveredStudent] = []
+    @State private var isLoading = true
+    @State private var loadFailed = false
+
+    private var students: [DiscoveredStudent] { profiles.filter { saved.isSaved($0.id) } }
+
+    private func load(_ ids: Set<String>) async {
+        isLoading = true
+        loadFailed = false
+        profiles = []
+        defer { if !Task.isCancelled { isLoading = false } }
+        do {
+            let found = try await StudentDiscoveryService().fetchProfiles(
+                ids: Set(ids.compactMap { UUID(uuidString: $0) })
+            )
+            try Task.checkCancellation()
+            profiles = found
+        } catch {
+            if !Task.isCancelled { loadFailed = true }
+        }
+    }
 
     var body: some View {
         ZStack {
             AtmosphericBackground()
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 12) {
                     header
-                    if directory.isLoading && directory.students.isEmpty {
-                        HStack { Spacer(); ProgressView().tint(Theme.primaryAction); Spacer() }.padding(.vertical, 40)
-                    } else if students.isEmpty {
-                        emptyState
-                    } else {
-                        VStack(spacing: 12) {
-                            ForEach(students) { s in
-                                NavigationLink { destination(s) } label: { row(s) }
-                                    .buttonStyle(.plain)
-                            }
+                    Picker("Saved content", selection: $segment) {
+                        ForEach(Segment.allCases) { option in
+                            Text(option.rawValue).tag(option)
                         }
                     }
+                    .pickerStyle(.segmented)
+                    .frame(minHeight: 44)
+
+                    switch segment {
+                    case .students: studentContent
+                    case .posts: postContent
+                    }
                 }
-                .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 44)
+                .padding(.horizontal, 20).padding(.top, 8).padding(.bottom, 24)
             }
             .scrollIndicators(.hidden)
+            .refreshable {
+                switch segment {
+                case .students: await load(saved.saved)
+                case .posts: await postStore.refreshSavedPosts()
+                }
+            }
         }
+        .tint(Theme.ink)
         .toolbar(.hidden, for: .navigationBar)
-        .task { await directory.loadIfNeeded() }
+        .toolbarVisibility(.hidden, for: .tabBar)
+        .task(id: saved.saved) { await load(saved.saved) }
+        .task(id: segment) {
+            if segment == .posts { await postStore.refreshSavedPosts() }
+        }
+        .navigationDestination(item: $selectedPost) { postID in
+            PostDetailView(store: postStore, postID: postID)
+                .task {
+                    if postStore.post(id: postID)?.authorID == postStore.accountID &&
+                        postStore.skills.isEmpty {
+                        await postStore.refreshSkills()
+                    }
+                }
+        }
+    }
+
+    @ViewBuilder private var studentContent: some View {
+        if isLoading {
+            loading("Loading saved students")
+        } else if loadFailed {
+            Text("Couldn’t load saved students.")
+            Button("Retry") { Task { await load(saved.saved) } }
+                .frame(minHeight: 44)
+        } else if students.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No saved students yet.").font(Theme.Typography.headline)
+                Button("Explore") {
+                    dismiss()
+                    router.openExplore()
+                }
+                .frame(minHeight: 44)
+            }
+        } else {
+            LazyVStack(spacing: 12) {
+                ForEach(students) { student in row(student) }
+            }
+        }
+    }
+
+    @ViewBuilder private var postContent: some View {
+        let posts = CommunityFeedFilters(order: .latest, savedOnly: true)
+            .results(from: postStore.posts, learning: [])
+        if postStore.feedError {
+            Text("Couldn’t load saved posts.")
+            Button("Retry") { Task { await postStore.refreshSavedPosts() } }
+                .frame(minHeight: 44)
+                .disabled(postStore.loading)
+        } else if !postStore.loaded || (postStore.loading && posts.isEmpty) {
+            loading("Loading saved posts")
+        } else if posts.isEmpty {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("No saved posts yet.").font(Theme.Typography.headline)
+                NavigationLink("Open Community") { CommunityView() }
+                    .frame(minHeight: 44)
+            }
+        } else {
+            LazyVStack(spacing: 12) {
+                ForEach(posts) { post in
+                    Button {
+                        if selectedPost == nil { selectedPost = post.id }
+                    } label: {
+                        CommunityPostCard(post: post)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    private func loading(_ label: String) -> some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+            .accessibilityLabel(label)
     }
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             Button { dismiss() } label: {
-                Image(systemName: "arrow.left").font(.system(size: 16, weight: .semibold))
+                BackChevron()
                     .foregroundStyle(Theme.charcoal).frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain).accessibilityLabel("Back")
-            Text("Saved Students").font(Theme.Typography.displayLarge).foregroundStyle(Theme.charcoal)
+            Text("Saved").font(Theme.Typography.displayLarge).foregroundStyle(Theme.charcoal)
         }
         .padding(.top, 4)
     }
 
     private func row(_ s: DiscoveredStudent) -> some View {
         HStack(spacing: 12) {
-            avatar(s)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(s.name).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.charcoal)
-                Text(s.major).font(Theme.Typography.meta).foregroundStyle(Theme.mutedStone)
+            NavigationLink {
+                destination(s).toolbarVisibility(.hidden, for: .tabBar)
+            } label: {
+                HStack(spacing: 12) {
+                    avatar(s)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.name).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.charcoal)
+                        Text(s.major).font(Theme.Typography.meta).foregroundStyle(Theme.mutedStone)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer()
-            BookmarkButton(studentID: s.id)
+            .buttonStyle(.plain)
+            BookmarkButton(studentID: s.id, minimumTarget: 44)
         }
         .padding(14)
         .background(Theme.surface).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
@@ -148,17 +268,7 @@ struct SavedStudentsView: View {
         StudentProfileView(student: s)
     }
 
-    private var emptyState: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "bookmark").font(.system(size: 26)).foregroundStyle(Theme.mutedStone)
-            Text("No saved students yet").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
-            Text("Tap the bookmark on a student to save them here.")
-                .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone).multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity).padding(.vertical, 40).padding(.horizontal, 20)
-        .background(Theme.surface.opacity(0.6)).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
-    }
+
 }
 
 // MARK: - Received Kudos (real — Supabase, recipient-visible)
@@ -205,9 +315,9 @@ struct KudosReceivedView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             Button { dismiss() } label: {
-                Image(systemName: "arrow.left").font(.system(size: 16, weight: .semibold))
+                BackChevron()
                     .foregroundStyle(Theme.charcoal).frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain).accessibilityLabel("Back")
             Text("Kudos").font(Theme.Typography.displayLarge).foregroundStyle(Theme.charcoal)

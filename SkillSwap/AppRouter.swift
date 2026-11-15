@@ -15,7 +15,7 @@ import Combine
 @MainActor
 final class AppRouter: ObservableObject {
 
-    enum Tab: Hashable { case home, explore, exchanges, profile }
+    enum Tab: Hashable { case home, explore, exchanges, chats, profile }
 
     /// The currently selected bottom tab (ContentView binds the TabView to this).
     @Published var tab: Tab = .home

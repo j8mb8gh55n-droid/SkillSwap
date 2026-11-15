@@ -1,142 +1,226 @@
-//
-//  CommunityStore.swift
-//  SkillSwap
-//
-//  Batch B: in-memory store for the Community tab. Holds the feed and supports
-//  meaningful LOCAL interactions — appreciations, comments, and creating posts.
-//
-//  ⚠️ MOCK / LOCAL ONLY. Seeded from MockData; nothing here is persisted to
-//  Supabase (the community backend is not built this sprint). State lives for
-//  the app session. See DATA_SOURCES.md.
-//
-
-import SwiftUI
 import Combine
+import Foundation
+import Supabase
 
-// MARK: - Local author identity (stand-in for the signed-in user)
+struct CommunityService {
+    private let client = SupabaseManager.client
+    private func fields(savedOnly: Bool = false) -> String {
+        let bookmarkJoin = savedOnly ? "!inner" : ""
+        return """
+        id, author_id, kind, title, body, external_url, created_at, updated_at,
+        author:profiles!community_posts_author_id_fkey(full_name),
+        tag_links:community_post_skills(skill:skills(id, name)),
+        bookmarks:community_saved_posts\(bookmarkJoin)(post_id)
+        """
+    }
 
-enum CommunityMe {
-    static let name     = "You"
-    static let initials = "YOU"
+    func fetchPosts(authorID: UUID? = nil, savedBy: UUID? = nil) async throws -> [CommunityPostItem] {
+        var cursor: String?
+        var posts: [CommunityPostItem] = []
+        while true {
+            try Task.checkCancellation()
+            let query = client.from("community_posts").select(fields(savedOnly: savedBy != nil))
+            if let savedBy { _ = query.eq("bookmarks.student_id", value: savedBy) }
+            if let authorID { _ = query.eq("author_id", value: authorID) }
+            if let cursor { _ = query.gt("id", value: cursor) }
+            let page: [CommunityPostItem] = try await query.order("id").limit(100).execute().value
+            if page.isEmpty { return posts }
+            for post in page {
+                let key = post.id.uuidString
+                if let cursor, key <= cursor { throw CommunityError.invalidPage }
+                cursor = key
+                posts.append(post)
+            }
+        }
+    }
+
+    func fetchPost(id: UUID) async throws -> CommunityPostItem? {
+        let posts: [CommunityPostItem] = try await client.from("community_posts").select(fields())
+            .eq("id", value: id).limit(1).execute().value
+        return posts.first
+    }
+
+    func savePost(_ draft: CommunityPostDraft, id: UUID?) async throws -> UUID {
+        struct Parameters: Encodable {
+            let p_kind: CommunityPostType
+            let p_title: String
+            let p_body: String
+            let p_skill_ids: [Int]
+            let p_external_url: String
+            let p_post_id: UUID?
+        }
+        return try await client.rpc("community_save_post", params: Parameters(
+            p_kind: draft.kind, p_title: draft.cleanTitle, p_body: draft.cleanBody,
+            p_skill_ids: draft.skillIDs.sorted(), p_external_url: draft.cleanLink, p_post_id: id
+        )).execute().value
+    }
+
+    func deletePost(id: UUID) async throws {
+        let deleted: [IDRow] = try await client.from("community_posts").delete()
+            .eq("id", value: id).select("id").execute().value
+        guard deleted.first?.id == id else { throw CommunityError.unavailable }
+    }
+
+    func setBookmark(post: UUID, saved: Bool) async throws {
+        struct Bookmark: Encodable { let post_id: UUID }
+        if saved {
+            try await client.from("community_saved_posts").upsert(
+                Bookmark(post_id: post), onConflict: "student_id,post_id",
+                returning: .minimal, ignoreDuplicates: true
+            ).execute()
+        } else {
+            try await client.from("community_saved_posts").delete(returning: .minimal)
+                .eq("post_id", value: post).execute()
+        }
+    }
+
+    private struct IDRow: Decodable { let id: UUID }
+
+    enum CommunityError: Error {
+        case invalidPage, unavailable
+    }
 }
-
-// MARK: - Models
-
-struct CommunityComment: Identifiable {
-    let id = UUID()
-    let authorName: String
-    let authorInitials: String
-    let text: String
-}
-
-struct CommunityPostItem: Identifiable {
-    let id: String
-    let kind: CommunityPostKind
-    let authorName: String
-    let authorInitials: String
-    let title: String
-    let body: String
-    let skillTags: [String]
-    var appreciations: Int
-    var likedByMe: Bool
-    var comments: [CommunityComment]
-    let bannerColors: [Color]
-}
-
-// MARK: - Store
 
 @MainActor
 final class CommunityStore: ObservableObject {
+    @Published private(set) var posts: [CommunityPostItem] = []
+    @Published private(set) var skills: [CatalogSkill] = []
+    @Published private(set) var matchSkills: ExploreMatchSkills?
+    @Published private(set) var accountID: UUID?
+    @Published private(set) var loading = false
+    @Published private(set) var loaded = false
+    @Published private(set) var writing = false
+    @Published private(set) var feedError = false
+    @Published private(set) var skillError = false
+    @Published private(set) var learningError = false
 
-    @Published var posts: [CommunityPostItem]
-    @Published var joinedChallenge = false
+    private let service = CommunityService()
+    var learning: Set<Int> { matchSkills?.learning ?? [] }
 
-    init() {
-        // Seed from MockData, adding a couple of sample comments for realism.
-        posts = MockData.communityPosts.enumerated().map { index, p in
-            CommunityPostItem(
-                id: p.id,
-                kind: p.kind,
-                authorName: p.authorName,
-                authorInitials: p.authorInitials,
-                title: p.title,
-                body: p.body,
-                skillTags: p.skillTags,
-                appreciations: p.appreciations,
-                likedByMe: false,
-                comments: index == 0
-                    ? [
-                        CommunityComment(authorName: "Lina Abdullah", authorInitials: "LA", text: "This is so inspiring! 🎉"),
-                        CommunityComment(authorName: "Reem Fahad", authorInitials: "RF", text: "Congrats — the UI looks clean.")
-                      ]
-                    : [],
-                bannerColors: p.bannerColors
+    func loadIfNeeded() async {
+        guard !loaded else { return }
+        await refresh()
+    }
+
+    func refresh() async {
+        guard !loading, !writing else { return }
+        loading = true
+        matchSkills = nil
+        defer { loading = false }
+        async let catalog: Void = refreshSkills()
+        async let preferences: Void = refreshLearning()
+        await refreshPosts()
+        _ = await (catalog, preferences)
+    }
+
+    func refreshAuthoredPosts(authorID: UUID?) async {
+        await refreshScopedPosts(authorID: authorID, savedOnly: false)
+    }
+
+    func refreshSavedPosts() async {
+        await refreshScopedPosts(authorID: nil, savedOnly: true)
+    }
+
+    private func refreshScopedPosts(authorID: UUID?, savedOnly: Bool) async {
+        guard !loading, !writing else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let viewer = try await SupabaseManager.client.auth.session.user.id
+            let snapshot = try await service.fetchPosts(
+                authorID: savedOnly ? nil : (authorID ?? viewer),
+                savedBy: savedOnly ? viewer : nil
             )
+            try Task.checkCancellation()
+            accountID = viewer
+            posts = snapshot
+            loaded = true
+            feedError = false
+        } catch {
+            if !Task.isCancelled { feedError = true }
         }
     }
 
-    // MARK: Appreciations
-
-    func toggleAppreciation(_ id: String) {
-        guard let i = posts.firstIndex(where: { $0.id == id }) else { return }
-        if posts[i].likedByMe {
-            posts[i].likedByMe = false
-            posts[i].appreciations -= 1
-        } else {
-            posts[i].likedByMe = true
-            posts[i].appreciations += 1
+    private func refreshPosts() async {
+        do {
+            accountID = try await SupabaseManager.client.auth.session.user.id
+            let snapshot = try await service.fetchPosts()
+            try Task.checkCancellation()
+            posts = snapshot
+            loaded = true
+            feedError = false
+        } catch {
+            if !Task.isCancelled { feedError = true }
         }
     }
 
-    // MARK: Comments
-
-    func addComment(_ text: String, to id: String) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              let i = posts.firstIndex(where: { $0.id == id }) else { return }
-        posts[i].comments.append(
-            CommunityComment(
-                authorName: CommunityMe.name,
-                authorInitials: CommunityMe.initials,
-                text: trimmed
-            )
-        )
-    }
-
-    func post(_ id: String) -> CommunityPostItem? {
-        posts.first { $0.id == id }
-    }
-
-    // MARK: Create
-
-    func addPost(kind: CommunityPostKind, title: String, body: String, tags: [String]) {
-        let newPost = CommunityPostItem(
-            id: "local-\(posts.count)-\(title.hashValue)",
-            kind: kind,
-            authorName: CommunityMe.name,
-            authorInitials: CommunityMe.initials,
-            title: title.trimmingCharacters(in: .whitespacesAndNewlines),
-            body: body.trimmingCharacters(in: .whitespacesAndNewlines),
-            skillTags: tags,
-            appreciations: 0,
-            likedByMe: false,
-            comments: [],
-            bannerColors: [Theme.lavender, Theme.softPink]
-        )
-        posts.insert(newPost, at: 0)
-    }
-
-    // MARK: Helpers
-
-    /// Finds a mock student who teaches `skill` (for "The Skill Behind It").
-    func studentsTeaching(_ skill: String) -> [MockStudent] {
-        MockData.students.filter {
-            $0.teaches.contains { $0.localizedCaseInsensitiveContains(skill) }
+    func refreshSkills() async {
+        do {
+            skills = try await StudentDiscoveryService().fetchCatalog()
+            skillError = false
+        } catch {
+            if !Task.isCancelled { skillError = true }
         }
     }
 
-    /// Maps a post author to a known mock student (for "Teach Me This").
-    func student(forAuthor name: String) -> MockStudent? {
-        MockData.students.first { $0.name == name }
+    private func refreshLearning() async {
+        do {
+            matchSkills = try await ProfileService().fetchMyExploreSkills()
+            learningError = false
+        } catch {
+            if !Task.isCancelled {
+                matchSkills = nil
+                learningError = true
+            }
+        }
+    }
+
+    func post(id: UUID) -> CommunityPostItem? { posts.first { $0.id == id } }
+
+    func revalidate(id: UUID) async throws {
+        guard !loading, !writing else { return }
+        let prior = post(id: id)
+        let updated = try await service.fetchPost(id: id)
+        try Task.checkCancellation()
+        guard !loading, !writing, post(id: id)?.updatedAt == prior?.updatedAt,
+              post(id: id)?.isSaved == prior?.isSaved else { return }
+        replace(id: id, with: updated)
+    }
+
+    private func replace(id: UUID, with updated: CommunityPostItem?) {
+        posts.removeAll { $0.id == id }
+        if let updated { posts.append(updated) }
+    }
+
+    func save(_ draft: CommunityPostDraft, id: UUID?) async throws {
+        guard !writing, !loading else { throw CommunityService.CommunityError.unavailable }
+        writing = true
+        defer { writing = false }
+        let savedID = try await service.savePost(draft, id: id)
+        await reloadAfterWrite(id: savedID)
+    }
+
+    func delete(id: UUID) async throws {
+        guard !writing, !loading else { throw CommunityService.CommunityError.unavailable }
+        writing = true
+        defer { writing = false }
+        try await service.deletePost(id: id)
+        replace(id: id, with: nil)
+    }
+
+    func setSaved(_ value: Bool, id: UUID) async throws {
+        guard !writing, !loading else { throw CommunityService.CommunityError.unavailable }
+        writing = true
+        defer { writing = false }
+        try await service.setBookmark(post: id, saved: value)
+        await reloadAfterWrite(id: id)
+    }
+
+    private func reloadAfterWrite(id: UUID) async {
+        do {
+            replace(id: id, with: try await service.fetchPost(id: id))
+        } catch {
+            feedError = true
+        }
     }
 }

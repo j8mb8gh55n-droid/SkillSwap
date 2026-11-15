@@ -79,9 +79,9 @@ struct NotificationsView: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
                 Button { dismiss() } label: {
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.charcoal)
-                        .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
+                    BackChevron().foregroundStyle(Theme.charcoal)
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.interactive(), in: .circle)
                 }
                 .buttonStyle(.plain).accessibilityLabel("Back")
                 Spacer()

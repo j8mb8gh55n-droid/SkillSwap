@@ -1,254 +1,8 @@
-//
-//  CommunityDetailViews.swift
-//  SkillSwap
-//
-//  Batch B: Post detail (appreciations + comments + "Teach Me This"), the
-//  Create Post interface, and the interactive skill-tag sheet ("The Skill
-//  Behind It"). All local/mock; "Teach Me This" navigates to the REAL
-//  RequestExchangeView screen. See DATA_SOURCES.md.
-//
-
 import SwiftUI
-
-// MARK: - Skill selection wrapper
 
 struct SkillSelection: Identifiable {
     let id: String
     var skill: String { id }
-}
-
-// MARK: - Post Detail
-
-struct PostDetailView: View {
-
-    @ObservedObject var store: CommunityStore
-    let postID: String
-
-    @Environment(\.dismiss) private var dismiss
-
-    @State private var newComment = ""
-    @State private var selectedSkill: SkillSelection?
-    @FocusState private var commentFocused: Bool
-
-    private var post: CommunityPostItem? { store.post(postID) }
-
-    var body: some View {
-
-        Group {
-            if let post {
-                content(post)
-            } else {
-                EmptyStateView(
-                    systemImage: "bubble.left",
-                    title: "Post unavailable",
-                    message: "This post is no longer available."
-                )
-                .padding(Theme.Spacing.screenH)
-            }
-        }
-        .skillSwapScreen()
-        .toolbar(.hidden, for: .navigationBar)
-        .sheet(item: $selectedSkill) { sel in
-            SkillTagSheet(skill: sel.skill)
-        }
-    }
-
-    private func content(_ post: CommunityPostItem) -> some View {
-
-        ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
-
-                backButton
-
-                banner(post)
-
-                Text(post.body)
-                    .font(.system(size: 15))
-                    .foregroundStyle(Theme.ink)
-                    .lineSpacing(5)
-
-                skillTags(post)
-
-                engagementRow(post)
-
-                commentsSection(post)
-
-                teachMeThis(post)
-            }
-            .padding(.horizontal, Theme.Spacing.screenH)
-            .padding(.top, 18)
-            .padding(.bottom, 40)
-        }
-        .scrollIndicators(.hidden)
-        .scrollDismissesKeyboard(.interactively)
-    }
-
-    private var backButton: some View {
-        Button { dismiss() } label: {
-            Image(systemName: "arrow.left")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 44, height: 44)
-                .background(Theme.surface)
-                .clipShape(Circle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func banner(_ post: CommunityPostItem) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(spacing: 12) {
-                AvatarBadge(initials: post.authorInitials, colors: post.bannerColors, size: 52)
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: post.kind.symbol).font(.system(size: 10))
-                        Text(post.kind.rawValue.uppercased())
-                            .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                    }
-                    .foregroundStyle(Theme.accent)
-                    Text(post.authorName)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.ink)
-                }
-                Spacer()
-            }
-
-            Text(post.title)
-                .font(.system(size: 28, weight: .black))
-                .tracking(-1)
-                .foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private func skillTags(_ post: CommunityPostItem) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("THE SKILL BEHIND IT")
-                .font(.system(size: 11, weight: .bold)).tracking(1)
-                .foregroundStyle(.secondary)
-
-            FlowTags(tags: post.skillTags) { tag in
-                selectedSkill = SkillSelection(id: tag)
-            }
-
-            Text("Tap a skill to see who can teach it.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private func engagementRow(_ post: CommunityPostItem) -> some View {
-        HStack(spacing: 22) {
-            Button {
-                withAnimation(.snappy) { store.toggleAppreciation(post.id) }
-            } label: {
-                HStack(spacing: 7) {
-                    Image(systemName: post.likedByMe ? "heart.fill" : "heart")
-                        .foregroundStyle(post.likedByMe ? Theme.softPink : .secondary)
-                    Text("\(post.appreciations)")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                }
-            }
-            .buttonStyle(.plain)
-
-            HStack(spacing: 7) {
-                Image(systemName: "bubble.left").foregroundStyle(.secondary)
-                Text("\(post.comments.count)")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-            }
-            Spacer()
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func commentsSection(_ post: CommunityPostItem) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            SectionHeader(title: "Appreciations & Comments")
-
-            ForEach(post.comments) { c in
-                HStack(alignment: .top, spacing: 12) {
-                    AvatarBadge(initials: c.authorInitials, size: 38)
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(c.authorName)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                        Text(c.text)
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                }
-            }
-
-            if post.comments.isEmpty {
-                Text("Be the first to leave an appreciation.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(spacing: 10) {
-                TextField("Add an appreciation…", text: $newComment)
-                    .font(.system(size: 14))
-                    .focused($commentFocused)
-                    .submitLabel(.send)
-                    .onSubmit(sendComment)
-
-                Button(action: sendComment) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .font(.system(size: 28))
-                        .foregroundStyle(
-                            newComment.trimmingCharacters(in: .whitespaces).isEmpty
-                            ? Color.gray.opacity(0.4) : Theme.accent
-                        )
-                }
-                .buttonStyle(.plain)
-                .disabled(newComment.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-            .padding(14)
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.small))
-        }
-    }
-
-    private func teachMeThis(_ post: CommunityPostItem) -> some View {
-        let student = store.student(forAuthor: post.authorName)
-        let teaches = post.skillTags.first ?? (student?.teaches.first ?? "a skill")
-        return VStack(alignment: .leading, spacing: 10) {
-            NavigationLink {
-                RequestExchangeView(
-                    studentName: post.authorName,
-                    studentMajor: student?.major ?? "SkillSwap Student",
-                    studentTeaches: teaches,
-                    studentWantsToLearn: student?.learns.first ?? "",
-                    studentInitials: post.authorInitials,
-                    bannerColors: post.bannerColors
-                )
-            } label: {
-                HStack {
-                    Text("Teach Me This")
-                        .font(.system(size: 15, weight: .semibold))
-                    Spacer()
-                    Image(systemName: "arrow.up.right")
-                }
-                .foregroundStyle(.white)
-                .padding(19)
-                .background(Theme.ink)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
-            }
-            .buttonStyle(.plain)
-
-            SubtleNote(text: "Community posts are a preview. Sending a request opens the real exchange flow.")
-        }
-    }
-
-    private func sendComment() {
-        store.addComment(newComment, to: postID)
-        newComment = ""
-        commentFocused = false
-    }
 }
 
 // MARK: - Skill Tag Sheet ("The Skill Behind It")
@@ -343,152 +97,196 @@ struct SkillTagSheet: View {
     }
 }
 
-// MARK: - Create Post
+struct PostDetailView: View {
+    @ObservedObject var store: CommunityStore
+    let postID: UUID
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var editPost: CommunityPostItem?
+    @State private var confirmDelete = false
+    @State private var error: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                ScreenHeader(title: "Post", dismiss: dismiss)
+                if let error {
+                    Text(error).font(Theme.Typography.callout).foregroundStyle(.secondary)
+                }
+                if store.feedError {
+                    Button("Retry loading post") { Task { await reload() } }
+                }
+                if let post = store.post(id: postID) {
+                    content(post)
+                } else {
+                    EmptyStateView(systemImage: "doc", title: "Post unavailable",
+                                   message: "It may have been deleted.")
+                }
+            }
+            .padding(Theme.Spacing.screenH)
+        }
+        .skillSwapScreen()
+        .tint(Theme.ink)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarVisibility(.hidden, for: .tabBar)
+        .task { await reload() }
+        .refreshable { await reload() }
+        .sheet(item: $editPost) { post in
+            CreatePostView(store: store, post: post)
+        }
+        .confirmationDialog("Delete this post?", isPresented: $confirmDelete, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                Task {
+                    do {
+                        try await store.delete(id: postID)
+                        dismiss()
+                    } catch {
+                        self.error = "Couldn’t delete the post. Try again."
+                    }
+                }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func reload() async {
+        error = nil
+        do { try await store.revalidate(id: postID) }
+        catch { if !Task.isCancelled { self.error = "Couldn’t refresh this post." } }
+    }
+
+    private func content(_ post: CommunityPostItem) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            RoundedCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(post.kind.label, systemImage: post.kind.symbol)
+                        .font(Theme.Typography.meta).foregroundStyle(Theme.ink)
+                    Text(post.title).font(Theme.Typography.displayLarge)
+                    Text(post.author.name).font(Theme.Typography.headline)
+                    Text(post.createdAt.formatted(date: .abbreviated, time: .omitted))
+                        .font(Theme.Typography.meta).foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Text(post.body).font(Theme.Typography.callout).textSelection(.enabled)
+            Text(post.skills.map(\.name).joined(separator: " · "))
+                .font(Theme.Typography.meta).foregroundStyle(Theme.ink)
+            if let value = post.externalURL, let url = CommunityPostDraft.httpsURL(value) {
+                Link(destination: url) {
+                    Label("Open link on \(url.host ?? "the web")", systemImage: "arrow.up.right")
+                }
+            }
+            HStack {
+                Button {
+                    error = nil
+                    Task {
+                        do { try await store.setSaved(!post.isSaved, id: post.id) }
+                        catch { self.error = "Couldn’t update your saved posts. Try again." }
+                    }
+                } label: {
+                    Label(post.isSaved ? "Unsave" : "Save", systemImage: post.isSaved ? "bookmark.fill" : "bookmark")
+                }
+                if post.authorID == store.accountID {
+                    Spacer()
+                    Menu {
+                        Button("Edit", systemImage: "pencil") { editPost = post }
+                        Button("Delete", systemImage: "trash", role: .destructive) { confirmDelete = true }
+                    } label: {
+                        Image(systemName: "ellipsis.circle").frame(width: 44, height: 44)
+                    }
+                    .accessibilityLabel("Post actions")
+                }
+            }
+            .disabled(store.writing || store.loading)
+            if store.writing { ProgressView().accessibilityLabel("Updating post") }
+        }
+        .foregroundStyle(Theme.ink)
+    }
+}
 
 struct CreatePostView: View {
-
     @ObservedObject var store: CommunityStore
+    private let postID: UUID?
     @Environment(\.dismiss) private var dismiss
+    @State private var draft: CommunityPostDraft
+    @State private var error: String?
+    @State private var skillSearch = ""
 
-    @State private var kind: CommunityPostKind = .madeIt
-    @State private var title = ""
-    @State private var body_ = ""
-    @State private var tagsText = ""
-
-    private let kinds: [CommunityPostKind] = [.madeIt, .swapStory, .skillSnap]
-
-    private var canPost: Bool {
-        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    init(store: CommunityStore, post: CommunityPostItem? = nil) {
+        self.store = store
+        postID = post?.id
+        _draft = State(initialValue: CommunityPostDraft(post: post))
     }
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("SHARE WITH THE COMMUNITY")
-                            .font(.system(size: 11, weight: .heavy)).tracking(2)
-                            .foregroundStyle(Theme.accent)
-                        Text("Create a post")
-                            .font(.system(size: 30, weight: .black))
-                            .tracking(-1)
-                            .foregroundStyle(Theme.ink)
+            Form {
+                Section("Post") {
+                    Picker("Type", selection: $draft.kind) {
+                        ForEach(CommunityPostType.allCases) { kind in Text(kind.label).tag(kind) }
                     }
-
-                    // Kind picker
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("TYPE").font(.system(size: 11, weight: .bold)).tracking(1)
-                            .foregroundStyle(.secondary)
-                        HStack(spacing: 9) {
-                            ForEach(kinds, id: \.rawValue) { k in
-                                Button { kind = k } label: {
-                                    Text(k.rawValue)
-                                        .font(.system(size: 13, weight: .semibold))
-                                        .foregroundStyle(kind == k ? .white : Theme.ink)
-                                        .padding(.horizontal, 14).padding(.vertical, 11)
-                                        .background(kind == k ? Theme.ink : .white)
-                                        .clipShape(Capsule())
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                    }
-
-                    field(title: "TITLE", placeholder: "What did you make or learn?", text: $title)
-
-                    VStack(alignment: .leading, spacing: 9) {
-                        Text("DETAILS").font(.system(size: 11, weight: .bold)).tracking(1)
-                            .foregroundStyle(.secondary)
-                        ZStack(alignment: .topLeading) {
-                            if body_.isEmpty {
-                                Text("Tell the story…")
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.gray.opacity(0.7))
-                                    .padding(.horizontal, 17).padding(.top, 19)
-                                    .allowsHitTesting(false)
-                            }
-                            TextEditor(text: $body_)
-                                .font(.system(size: 14))
-                                .scrollContentBackground(.hidden)
-                                .frame(height: 110)
-                                .padding(.horizontal, 12).padding(.vertical, 10)
-                        }
-                        .background(Theme.surface)
-                        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
-                    }
-
-                    field(title: "SKILL TAGS", placeholder: "Swift, UI/UX Design", text: $tagsText)
-                    Text("Separate skills with commas.")
-                        .font(.system(size: 12)).foregroundStyle(.secondary)
-
-                    PrimaryButton(title: "Share Post", systemImage: "paperplane.fill", isEnabled: canPost) {
-                        store.addPost(
-                            kind: kind,
-                            title: title,
-                            body: body_,
-                            tags: tagsText.split(separator: ",")
-                                .map { $0.trimmingCharacters(in: .whitespaces) }
-                                .filter { !$0.isEmpty }
-                        )
-                        dismiss()
-                    }
-
-                    SubtleNote(text: "Your post appears in the feed for this session. Community posting isn’t saved to the server yet.")
+                    TextField("Title", text: $draft.title)
+                    TextField("Post text", text: $draft.body, axis: .vertical).lineLimit(4...10)
+                    TextField("Optional HTTPS link", text: $draft.link)
+                        .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
                 }
-                .padding(Theme.Spacing.screenH)
-                .padding(.top, 10)
+                Section {
+                    TextField("Find a skill", text: $skillSearch)
+                    if store.skillError {
+                        Button("Retry loading skills") { Task { await store.refreshSkills() } }
+                    } else if store.skills.isEmpty {
+                        Text("No catalog skills available.").foregroundStyle(.secondary)
+                    }
+                    ForEach(store.skills.filter { skillSearch.isEmpty || $0.name.localizedStandardContains(skillSearch) }) { skill in
+                        Toggle(skill.name, isOn: Binding(
+                            get: { draft.skillIDs.contains(skill.id) },
+                            set: { selected in
+                                if selected { draft.skillIDs.insert(skill.id) }
+                                else { draft.skillIDs.remove(skill.id) }
+                            }
+                        ))
+                        .disabled(draft.skillIDs.count >= CommunityPostDraft.tagLimit && !draft.skillIDs.contains(skill.id))
+                    }
+                } header: {
+                    Text("Skills (\(draft.skillIDs.count) selected)")
+                }
+                Section {
+                    Text("Signed-in students can see your posts even when Discoverable in Explore is off.")
+                        .font(Theme.Typography.meta).foregroundStyle(.secondary)
+                    if let error { Text(error).foregroundStyle(.red) }
+                }
             }
-            .scrollIndicators(.hidden)
-            .scrollDismissesKeyboard(.interactively)
-            .background(Theme.creamWarm.ignoresSafeArea())
-            .environment(\.colorScheme, .light)
+            .navigationTitle(postID == nil ? "Create Post" : "Edit Post")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Cancel") { dismiss() }.foregroundStyle(Theme.ink)
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }.disabled(store.writing)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    if store.writing {
+                        ProgressView().accessibilityLabel("Saving post")
+                    } else {
+                        Button(postID == nil ? "Publish" : "Save") { submit() }.disabled(store.loading)
+                    }
                 }
             }
+            .interactiveDismissDisabled(store.writing)
+            .tint(Theme.ink)
         }
     }
 
-    private func field(title: String, placeholder: String, text: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 9) {
-            Text(title).font(.system(size: 11, weight: .bold)).tracking(1)
-                .foregroundStyle(.secondary)
-            TextField(placeholder, text: text)
-                .font(.system(size: 15))
-                .padding(16)
-                .background(Theme.surface)
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
+    private func submit() {
+        if let validationError = draft.validationError {
+            error = validationError
+            return
         }
-    }
-}
-
-// MARK: - Flow Tags (simple wrapping tag row of buttons)
-
-struct FlowTags: View {
-    let tags: [String]
-    var onTap: (String) -> Void
-
-    var body: some View {
-        LazyVGrid(
-            columns: [GridItem(.adaptive(minimum: 100), spacing: 9, alignment: .leading)],
-            alignment: .leading, spacing: 9
-        ) {
-            ForEach(tags, id: \.self) { tag in
-                Button { onTap(tag) } label: {
-                    HStack(spacing: 5) {
-                        Text(tag)
-                            .font(.system(size: 12, weight: .semibold))
-                        Image(systemName: "arrow.up.right").font(.system(size: 9))
-                    }
-                    .foregroundStyle(Theme.ink)
-                    .padding(.horizontal, 13).padding(.vertical, 9)
-                    .background(Theme.lavenderTint)
-                    .clipShape(Capsule())
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .buttonStyle(.plain)
+        error = nil
+        Task {
+            do {
+                try await store.save(draft, id: postID)
+                dismiss()
+            } catch {
+                self.error = "Couldn’t confirm the save. Check the feed before trying to publish again."
             }
         }
     }

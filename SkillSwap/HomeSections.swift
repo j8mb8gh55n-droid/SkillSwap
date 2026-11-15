@@ -1,16 +1,3 @@
-//
-//  HomeSections.swift
-//  SkillSwap
-//
-//  Soft Chromatic iOS — Home sections. Background is sage/ivory (Atmospheric
-//  Background); content cards use curated pastel gradients. SF Pro throughout.
-//  Same features & navigation (minus Skill Chemistry & Skill Roulette). Content
-//  is MOCK (MockData) except the Upcoming Exchange, which shows an honest empty
-//  state (no real session data is wired this sprint). See DATA_SOURCES.md.
-//
-//  Padding-agnostic: these live inside Home's horizontally-padded stack.
-//
-
 import SwiftUI
 
 // MARK: - Gradient helpers
@@ -230,81 +217,108 @@ struct UpcomingSession {
 //  appears on Home. Upcoming sessions live in the Exchanges tab. The
 //  UpcomingSession model + UpcomingSessionService are kept for reuse.)
 
-// MARK: - Skills in Demand (gradient tiles, no icons)
+// MARK: - Compact Home Recommendations
 
-struct HomeSkillsInDemand: View {
-
-    @State private var selected: SkillSelection?
+struct HomeRecommendationCard: View {
+    let student: DiscoveredStudent
+    let isMutual: Bool
+    @ScaledMetric(relativeTo: .headline) private var width = 148.0
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            EditorialSectionHeader(title: "Skills in Demand")
+        VStack(alignment: .leading, spacing: 6) {
+            DiscoveryStudentAvatar(student: student)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 12) {
-                    ForEach(Array(MockData.skillsInDemand.enumerated()), id: \.element.id) { i, d in
-                        Button { selected = SkillSelection(id: d.skill) } label: {
-                            demandTile(d, colors: HomeGradients.pair(i))
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.vertical, 2)
+            Text(student.name).font(.headline).fixedSize(horizontal: false, vertical: true)
+            if isMutual {
+                Label("Mutual Match", systemImage: "arrow.left.arrow.right")
+                    .font(Theme.Typography.meta.weight(.semibold))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .glassEffect(.regular.tint(Theme.mint.opacity(0.27)), in: .capsule)
+            } else if !student.major.isEmpty {
+                Text(student.major).font(Theme.Typography.meta)
+                    .foregroundStyle(.secondary).lineLimit(2)
             }
         }
-        .sheet(item: $selected) { sel in
-            SkillTagSheet(skill: sel.skill)
+        .foregroundStyle(Theme.ink)
+        .padding(12)
+        .frame(width: min(width, 228), alignment: .leading)
+        .background {
+            GeometryReader { bounds in
+                StudentCardBackground(imageURL: student.avatarURL,
+                                      fallbackColors: [Theme.neutralSurface, Theme.surface],
+                                      cornerRadius: Theme.Radius.tile)
+                    .frame(width: bounds.size.width, height: bounds.size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Radius.tile)
+                            .fill(Theme.warmIvory.opacity(0.43))
+                    }
+            }
+            .allowsHitTesting(false)
         }
-    }
-
-    private func demandTile(_ d: DemandSkill, colors: [Color]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Spacer(minLength: 0)
-            Text(d.skill)
-                .font(Theme.Typography.headline).foregroundStyle(Theme.onPastel)
-                .lineLimit(2).fixedSize(horizontal: false, vertical: true)
-            Text("\(d.seekers) learning")
-                .font(Theme.Typography.meta).foregroundStyle(Theme.onPastel.opacity(0.65))
-        }
-        .padding(16)
-        .frame(width: 150, height: 112, alignment: .leading)
-        .background(HomeGradients.soft(colors))
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(.white.opacity(0.45), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.tile).strokeBorder(Theme.hairline)
+            .allowsHitTesting(false))
     }
 }
 
-// MARK: - Hidden Gems (compact student cards)
-
-struct HomeHiddenGems: View {
-
+struct HomeSkillsInDemand: View {
     @EnvironmentObject private var directory: StudentDirectory
+    @Environment(\.colorScheme) private var appearance
+    @ScaledMetric(relativeTo: .headline) private var tileWidth = 148.0
+    @ScaledMetric(relativeTo: .headline) private var tileHeight = 96.0
 
-    // Real students (the last few, for variety vs. Featured). Hidden when empty.
-    private var gems: [DiscoveredStudent] { Array(directory.students.suffix(4)) }
-
-    private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
-
-    @ViewBuilder var body: some View {
-        if !gems.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                EditorialSectionHeader(title: "Hidden Gems")
-
-                LazyVGrid(columns: columns, spacing: 14) {
-                    ForEach(Array(gems.enumerated()), id: \.element.id) { i, s in
-                        NavigationLink {
-                            StudentProfileView(student: s)
-                        } label: {
-                            HomeStudentCard(student: s.card(colorIndex: i), colors: HomeGradients.studentPair(i), style: .gem)
-                        }
-                        .buttonStyle(.plain)
-                        .overlay(alignment: .topTrailing) { BookmarkButton(studentID: s.id).padding(10) }
-                    }
+    var body: some View {
+        let skills = HomeSkillDemand.ranked(in: directory.students)
+        VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
+                EditorialSectionHeader(title: "Skills in Demand")
+                if !skills.isEmpty {
+                    Text("Skills students want to learn")
+                        .font(Theme.Typography.meta).foregroundStyle(.secondary)
+                        .accessibilityHint("Counts include discoverable students.")
                 }
             }
+            if !skills.isEmpty {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(Array(skills.enumerated()), id: \.element.id) { index, demand in
+                            NavigationLink {
+                                FeaturedSkillDetailView(skill: demand.skill)
+                            } label: {
+                                demandTile(demand, colors: HomeGradients.pair(index))
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+            } else if directory.hasLoaded {
+                Text("No learning skills listed yet.")
+                    .font(Theme.Typography.callout).foregroundStyle(.secondary)
+            } else if let error = directory.loadError {
+                Text(error).font(Theme.Typography.callout).foregroundStyle(.secondary)
+            } else {
+                ProgressView().accessibilityLabel("Loading skill demand")
+            }
+        }
+    }
+
+    private func demandTile(_ demand: HomeSkillDemand, colors: [Color]) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(demand.skill.name).font(.headline).lineLimit(2, reservesSpace: true)
+            Text(demand.count == 1 ? "1 student" : "\(demand.count) students")
+                .font(Theme.Typography.meta)
+        }
+        .foregroundStyle(appearance == .dark ? Theme.ink : Theme.onPastel)
+        .padding(12)
+        .frame(width: max(148, tileWidth), height: tileHeight, alignment: .leading)
+        .background {
+            ZStack {
+                HomeGradients.soft(colors)
+                Theme.surface.opacity(appearance == .dark ? 0.82 : 0.34)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
         }
     }
 }

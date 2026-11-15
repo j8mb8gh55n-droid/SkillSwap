@@ -31,7 +31,10 @@ struct SettingsView: View {
     @AppStorage("notify_sessions")  private var notifySessions = true
     @AppStorage("notify_community") private var notifyCommunity = false
     @AppStorage("notify_kudos")     private var notifyKudos = true
-    @AppStorage("privacy_discoverable") private var discoverable = true
+    @State private var discoverable: Bool?
+    @State private var isUpdatingDiscoverability = false
+    @State private var discoverabilityError: String?
+    private let profileService = ProfileService()
     @AppStorage("appAppearance")    private var appearancePref = AppAppearance.system.rawValue
 
     var body: some View {
@@ -58,6 +61,7 @@ struct SettingsView: View {
         .task {
             email = (try? await SupabaseManager.client.auth.session.user.email) ?? ""
         }
+        .task { await loadDiscoverability() }
         .confirmationDialog("Log out of SkillSwap?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
             Button("Log Out", role: .destructive) { Task { await logOut() } }
             Button("Cancel", role: .cancel) {}
@@ -117,18 +121,77 @@ struct SettingsView: View {
 
     // MARK: Privacy & Safety
 
+    private func loadDiscoverability() async {
+        guard !isUpdatingDiscoverability else { return }
+        isUpdatingDiscoverability = true
+        defer { isUpdatingDiscoverability = false }
+        discoverabilityError = nil
+        do {
+            discoverable = try await profileService.fetchDiscoverability()
+        } catch {
+            discoverabilityError = "Couldn’t load your discoverability preference."
+        }
+    }
+
+    private func saveDiscoverability(_ value: Bool) async {
+        guard !isUpdatingDiscoverability, discoverable != value else { return }
+        isUpdatingDiscoverability = true
+        defer { isUpdatingDiscoverability = false }
+        discoverabilityError = nil
+        do {
+            discoverable = try await profileService.saveDiscoverability(value)
+        } catch {
+            discoverabilityError = "Couldn’t confirm the change. Reload to check your saved preference."
+        }
+    }
+
     private var privacyGroup: some View {
         SettingsGroup("Privacy & Safety") {
-            SettingsToggleRow(icon: "eye", tint: Theme.lavenderSoft,
-                              title: "Discoverable in Explore", isOn: $discoverable)
+            VStack(alignment: .leading, spacing: 8) {
+                if let discoverable {
+                    SettingsToggleRow(icon: "eye", tint: Theme.lavenderSoft,
+                                      title: "Discoverable in Explore",
+                                      isOn: Binding(get: { discoverable }, set: { value in
+                                          Task { await saveDiscoverability(value) }
+                                      }))
+                    .disabled(isUpdatingDiscoverability)
+                } else {
+                    SettingsRowLabel(icon: "eye", tint: Theme.lavenderSoft, title: "Discoverable in Explore")
+                        .padding(16)
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Show my profile in Explore and Home recommendations.")
+                        .font(Theme.Typography.callout)
+                    Text("Turning this off removes you from discovery in supported versions of SkillSwap. Signed-in students can still access your public profile through existing routes.")
+                        .font(Theme.Typography.meta).foregroundStyle(.secondary)
+
+                    if isUpdatingDiscoverability {
+                        ProgressView().accessibilityLabel("Updating discoverability")
+                    }
+                    if let discoverabilityError {
+                        Text(discoverabilityError).font(Theme.Typography.meta)
+                        Button("Reload preference") { Task { await loadDiscoverability() } }
+                            .disabled(isUpdatingDiscoverability)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
+            }
             Divider().padding(.leading, 64)
-            SettingsNavRow(icon: "hand.raised", tint: Theme.softPink, title: "Blocked Users") {
-                BlockedUsersView()
+            SettingsNavRow(icon: "hand.raised", tint: Theme.softPink, title: "Blocked Students") {
+                BlockedStudentsView()
             }
             Divider().padding(.leading, 64)
             SettingsNavRow(icon: "exclamationmark.bubble", tint: Theme.softMint, title: "Report a Problem") {
                 ReportProblemView()
             }
+            #if DEBUG
+            Divider().padding(.leading, 64)
+            SettingsNavRow(icon: "flag", tint: Theme.lavenderSoft, title: "Moderator Demo") {
+                ModeratorDemoView()
+            }
+            #endif
         }
     }
 
@@ -219,14 +282,13 @@ struct ScreenHeader: View {
     var body: some View {
         HStack(spacing: 14) {
             Button { dismiss() } label: {
-                Image(systemName: "arrow.left")
-                    .font(.system(size: 17, weight: .semibold))
+                BackChevron()
                     .foregroundStyle(Theme.ink)
                     .frame(width: 44, height: 44)
-                    .background(Theme.surface)
-                    .clipShape(Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Back")
             Text(title).font(.system(size: 28, weight: .black)).tracking(-1)
                 .foregroundStyle(Theme.ink)
             Spacer()
@@ -444,24 +506,6 @@ struct ChangePasswordView: View {
                 errorMessage = error.localizedDescription
             }
         }
-    }
-}
-
-struct BlockedUsersView: View {
-    @Environment(\.dismiss) private var dismiss
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                ScreenHeader(title: "Blocked Users", dismiss: dismiss)
-                EmptyStateView(systemImage: "hand.raised",
-                               title: "No blocked users",
-                               message: "You haven’t blocked anyone. Blocking will be available with the community backend.")
-            }
-            .padding(.horizontal, Theme.Spacing.screenH).padding(.top, 10)
-        }
-        .scrollIndicators(.hidden)
-        .skillSwapScreen(background: Theme.cream)
-        .toolbar(.hidden, for: .navigationBar)
     }
 }
 

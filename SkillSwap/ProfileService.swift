@@ -47,6 +47,63 @@ struct ProfileService {
         return nil
     }
 
+    private struct DiscoverabilityPreference: Codable {
+        let discoverable_in_explore: Bool
+    }
+
+    func fetchDiscoverability() async throws -> Bool {
+        let userID = try await currentUserID()
+        let preference: DiscoverabilityPreference = try await client.from("profiles")
+            .select("discoverable_in_explore").eq("id", value: userID)
+            .single().execute().value
+        return preference.discoverable_in_explore
+    }
+
+    func saveDiscoverability(_ value: Bool) async throws -> Bool {
+        let userID = try await currentUserID()
+        let preference: DiscoverabilityPreference = try await client.from("profiles")
+            .update(DiscoverabilityPreference(discoverable_in_explore: value))
+            .eq("id", value: userID).select("discoverable_in_explore")
+            .single().execute().value
+        return preference.discoverable_in_explore
+    }
+
+    func fetchMyExploreSkills() async throws -> ExploreMatchSkills {
+        enum SkillReadError: Error { case invalidPageOrder }
+
+        struct Link: Decodable {
+            let id: Int
+            let skillID: Int
+            let skillType: String
+
+            enum CodingKeys: String, CodingKey {
+                case id
+                case skillID = "skill_id"
+                case skillType = "skill_type"
+            }
+        }
+
+        let userID = try await currentUserID()
+        var cursor: Int?
+        var teaching = Set<Int>()
+        var learning = Set<Int>()
+        while true {
+            let query = client.from("student_skills")
+                .select("id, skill_id, skill_type")
+                .eq("student_id", value: userID)
+            if let cursor { _ = query.gt("id", value: cursor) }
+            let page: [Link] = try await query.order("id").limit(200).execute().value
+            guard !page.isEmpty else { break }
+            for link in page {
+                if let cursor, link.id <= cursor { throw SkillReadError.invalidPageOrder }
+                cursor = link.id
+                if link.skillType == "teach" { teaching.insert(link.skillID) }
+                if link.skillType == "learn" { learning.insert(link.skillID) }
+            }
+        }
+        return ExploreMatchSkills(teaching: teaching, learning: learning)
+    }
+
     // MARK: - Fetch (assemble from the normalized tables)
 
     func fetchMyProfile() async throws -> LoadedProfile {

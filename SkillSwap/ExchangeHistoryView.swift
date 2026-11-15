@@ -68,11 +68,10 @@ struct ExchangeHistoryView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 14) {
             Button { dismiss() } label: {
-                Image(systemName: "arrow.left")
-                    .font(.system(size: 16, weight: .semibold))
+                BackChevron()
                     .foregroundStyle(Theme.charcoal)
                     .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Back")

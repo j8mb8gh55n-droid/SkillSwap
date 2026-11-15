@@ -368,10 +368,9 @@ struct ExchangeDetailsView: View {
             // Back + status, top row.
             HStack {
                 Button { dismiss() } label: {
-                    Image(systemName: "arrow.left")
-                        .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.charcoal)
+                    BackChevron().foregroundStyle(Theme.charcoal)
                         .frame(width: 44, height: 44)
-                        .background(Theme.surface.opacity(0.9), in: Circle())
+                        .glassEffect(.regular.interactive(), in: .circle)
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Back")
@@ -472,7 +471,8 @@ struct ExchangeDetailsView: View {
             initials: exchange.initials,
             bannerColors: exchange.bannerColors,
             imageURL: exchange.imageURL,
-            localImageName: exchange.localImageName
+            localImageName: exchange.localImageName,
+            communityAuthorID: UUID(uuidString: exchange.otherID)
         )
     }
 

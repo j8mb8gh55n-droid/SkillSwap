@@ -1,288 +1,180 @@
-//
-//  CommunityView.swift
-//  SkillSwap
-//
-//  Batch B: full Community feed. Made It / Swap Stories / SkillSnaps, monthly
-//  challenge, appreciations, comments, create-post, and interactive skill tags.
-//  Content is MOCK/local (CommunityStore). "Teach Me This" opens the real
-//  RequestExchangeView. See DATA_SOURCES.md.
-//
-
 import SwiftUI
 
 struct CommunityView: View {
-
-    @StateObject private var store = CommunityStore()
-
-    @State private var selectedFilter: String = "All"
+    @StateObject private var store: CommunityStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var filters = CommunityFeedFilters()
+    @State private var showSearch = false
     @State private var showCreate = false
 
-    private let filters = ["All", "Made It", "Swap Story", "SkillSnap"]
-
-    private var filteredPosts: [CommunityPostItem] {
-        selectedFilter == "All"
-            ? store.posts
-            : store.posts.filter { $0.kind.rawValue == selectedFilter }
+    init(store: CommunityStore? = nil) {
+        _store = StateObject(wrappedValue: store ?? CommunityStore())
     }
 
     var body: some View {
-
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: Theme.Spacing.section) {
-
-                    header
-                    createBar
-                    monthlyChallengeCard
-                    filterBar
-                    feed
-                }
-                .padding(.top, 18)
-                .padding(.bottom, 40)
+        ScrollView {
+            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+                header
+                filterBar
+                feed
             }
-            .scrollIndicators(.hidden)
-            .toolbar(.hidden, for: .navigationBar)
+            .padding(.horizontal, Theme.Spacing.screenH)
+            .padding(.vertical, 18)
         }
+        .scrollIndicators(.hidden)
+        .scrollDismissesKeyboard(.interactively)
+        .refreshable { await store.refresh() }
         .skillSwapScreen()
+        .tint(Theme.ink)
+        .toolbar(.hidden, for: .navigationBar)
+        .toolbarVisibility(.hidden, for: .tabBar)
+        .task { await store.loadIfNeeded() }
         .sheet(isPresented: $showCreate) {
             CreatePostView(store: store)
         }
     }
 
-    // MARK: - Header
-
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 7) {
-                Text("COMMUNITY")
-                    .font(.system(size: 12, weight: .heavy)).tracking(2.5)
-                    .foregroundStyle(Theme.ink)
-                Image(systemName: "sparkle").foregroundStyle(Theme.accent)
+        HStack {
+            Button { dismiss() } label: {
+                BackChevron().frame(width: 44, height: 44)
             }
-            Text("Where skills\nmeet people.")
-                .font(.system(size: 40, weight: .black)).tracking(-1.5)
-                .foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            Text("Celebrate what you’ve made and learned together.")
-                .font(.system(size: 14)).foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.screenH)
-    }
-
-    // MARK: - Create Bar
-
-    private var createBar: some View {
-        Button { showCreate = true } label: {
-            HStack(spacing: 12) {
-                AvatarBadge(initials: CommunityMe.initials, size: 44)
-                Text("Share a project, story, or SkillSnap…")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                Spacer()
+            .accessibilityLabel("Back")
+            Text("Community").font(Theme.Typography.displayLarge)
+            Spacer()
+            Button { showSearch.toggle() } label: {
+                Image(systemName: showSearch ? "xmark" : "magnifyingglass")
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityLabel(showSearch ? "Hide search" : "Search posts")
+            Button { showCreate = true } label: {
                 Image(systemName: "square.and.pencil")
-                    .foregroundStyle(Theme.accent)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.lavenderSoft, in: Circle())
+                    .foregroundStyle(Theme.onPastel)
             }
-            .padding(14)
-            .background(Theme.surface)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
+            .accessibilityLabel("Create post")
+            .disabled(store.loading || store.writing || !store.loaded)
         }
         .buttonStyle(.plain)
-        .padding(.horizontal, Theme.Spacing.screenH)
+        .foregroundStyle(Theme.ink)
     }
-
-    // MARK: - Monthly Challenge
-
-    private var monthlyChallengeCard: some View {
-        let challenge = MockData.currentChallenge
-        return ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: Theme.Radius.card).fill(Theme.lavenderSoft)
-            Circle().fill(.white.opacity(0.25)).frame(width: 150, height: 150).offset(x: 55, y: -55)
-            Image(systemName: "flag.checkered")
-                .font(.system(size: 40)).foregroundStyle(.white.opacity(0.6))
-                .rotationEffect(.degrees(-10)).offset(x: -22, y: 28)
-
-            VStack(alignment: .leading, spacing: 12) {
-                Text("\(challenge.month.uppercased()) SKILL CHALLENGE")
-                    .font(.system(size: 10, weight: .heavy)).tracking(2)
-                    .foregroundStyle(Theme.ink.opacity(0.7))
-                Text(challenge.title)
-                    .font(.system(size: 24, weight: .black)).tracking(-0.6)
-                    .foregroundStyle(Theme.ink)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(challenge.detail)
-                    .font(.system(size: 13)).foregroundStyle(Theme.ink.opacity(0.7))
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Button {
-                    withAnimation(.snappy) { store.joinedChallenge.toggle() }
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: store.joinedChallenge ? "checkmark" : "flag.fill")
-                            .font(.system(size: 12))
-                        Text(store.joinedChallenge ? "Joined" : "Join Challenge")
-                            .font(.system(size: 13, weight: .bold))
-                    }
-                    .foregroundStyle(store.joinedChallenge ? .white : Theme.ink)
-                    .padding(.horizontal, 16).padding(.vertical, 11)
-                    .background(store.joinedChallenge ? Theme.ink : .white)
-                    .clipShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 2)
-            }
-            .padding(22)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, Theme.Spacing.screenH)
-    }
-
-    // MARK: - Filter Bar
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 9) {
-                ForEach(filters, id: \.self) { f in
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.2)) { selectedFilter = f }
-                    } label: {
-                        Text(f)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(selectedFilter == f ? .white : Theme.ink)
-                            .padding(.horizontal, 18).padding(.vertical, 12)
-                            .background(selectedFilter == f ? Theme.ink : .white)
-                            .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
+        VStack(alignment: .leading, spacing: 12) {
+            if showSearch {
+                TextField("Search titles, text, and skills", text: $filters.search)
+                    .textFieldStyle(.roundedBorder)
+            } else if !filters.search.isEmpty {
+                Button("Clear search: \(filters.search)") { filters.search = "" }
+                    .font(Theme.Typography.meta)
+            }
+            Picker("Feed order", selection: $filters.order) {
+                ForEach(CommunityFeedFilters.Order.allCases) { order in
+                    Text(order.rawValue).tag(order)
                 }
             }
-            .padding(.horizontal, Theme.Spacing.screenH)
+            .pickerStyle(.segmented)
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 12) {
+                    Picker("Post type", selection: $filters.kind) {
+                        Text("All types").tag(nil as CommunityPostType?)
+                        ForEach(CommunityPostType.allCases) { kind in
+                            Text(kind.label).tag(Optional(kind))
+                        }
+                    }
+                    Picker("Skill", selection: $filters.skillID) {
+                        Text("All skills").tag(nil as Int?)
+                        ForEach(store.skills) { skill in Text(skill.name).tag(Optional(skill.id)) }
+                    }
+                    .disabled(store.skills.isEmpty)
+                    Toggle("Saved only", isOn: $filters.savedOnly)
+                        .toggleStyle(.button)
+                }
+                .pickerStyle(.menu)
+            }
+            .scrollIndicators(.hidden)
         }
     }
 
-    // MARK: - Feed
-
-    private var feed: some View {
-        VStack(spacing: 16) {
-            if filteredPosts.isEmpty {
-                EmptyStateView(
-                    systemImage: "square.stack.3d.up.slash",
-                    title: "Nothing here yet",
-                    message: "Be the first to share in \(selectedFilter).",
-                    actionTitle: "Create a Post",
-                    action: { showCreate = true }
-                )
-                .padding(.horizontal, Theme.Spacing.screenH)
+    @ViewBuilder private var feed: some View {
+        if store.feedError {
+            VStack(alignment: .leading, spacing: 6) {
+                Text(store.loaded ? "Couldn’t refresh posts." : "Couldn’t load Community.")
+                Button("Try Again") { Task { await store.refresh() } }
+            }
+        }
+        if store.learningError && filters.order == .forYou {
+            Text("Couldn’t load your learning skills. Showing the latest posts first.")
+                .font(Theme.Typography.meta).foregroundStyle(.secondary)
+        }
+        if store.skillError {
+            Button("Retry loading skill filters") { Task { await store.refreshSkills() } }
+        }
+        if !store.loaded {
+            if !store.feedError { ProgressView().accessibilityLabel("Loading posts") }
+        } else {
+            let posts = filters.results(from: store.posts, learning: store.learning)
+            if posts.isEmpty {
+                EmptyStateView(systemImage: "text.bubble", title: "No posts to show",
+                               message: "Try clearing your filters or share a post.")
             } else {
-                ForEach(filteredPosts) { post in
-                    PostCard(store: store, post: post)
-                        .padding(.horizontal, Theme.Spacing.screenH)
+                LazyVStack(spacing: 12) {
+                    ForEach(posts) { post in
+                        NavigationLink {
+                            PostDetailView(store: store, postID: post.id)
+                        } label: {
+                            CommunityPostCard(post: post)
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
         }
     }
 }
 
-// MARK: - Post Card
-
-private struct PostCard: View {
-
-    @ObservedObject var store: CommunityStore
+struct CommunityPostCard: View {
     let post: CommunityPostItem
+    var previewLines = 2
+    var showsSkillChips = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-
-            // Tapping the content area opens the detail.
-            NavigationLink {
-                PostDetailView(store: store, postID: post.id)
-            } label: {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(spacing: 12) {
-                        AvatarBadge(initials: post.authorInitials, colors: post.bannerColors, size: 48)
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Image(systemName: post.kind.symbol).font(.system(size: 10))
-                                Text(post.kind.rawValue.uppercased())
-                                    .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                            }
-                            .foregroundStyle(Theme.accent)
-                            Text(post.authorName)
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(Theme.ink)
-                        }
-                        Spacer()
-                    }
-
-                    Text(post.title)
-                        .font(.system(size: 18, weight: .bold)).tracking(-0.4)
+        RoundedCard {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Label(post.kind.label, systemImage: post.kind.symbol)
                         .foregroundStyle(Theme.ink)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Text(post.body)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-
-                    if !post.skillTags.isEmpty {
-                        HStack(spacing: 7) {
-                            ForEach(post.skillTags.prefix(3), id: \.self) { tag in
-                                SkillPill(text: tag)
+                    Spacer()
+                    if post.isSaved {
+                        Image(systemName: "bookmark.fill").accessibilityLabel("Saved")
+                    }
+                }
+                .font(Theme.Typography.meta)
+                Text(post.title).font(Theme.Typography.headline)
+                Text(post.body).font(Theme.Typography.callout).lineLimit(previewLines)
+                    .foregroundStyle(.secondary)
+                Text(post.author.name).font(Theme.Typography.meta).foregroundStyle(.secondary)
+                if showsSkillChips && !post.skills.isEmpty {
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 6) {
+                            ForEach(post.skills) { skill in
+                                Text(skill.name)
+                                    .font(Theme.Typography.meta)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .background(Theme.neutralSurface, in: Capsule())
                             }
                         }
                     }
+                    .scrollIndicators(.hidden)
+                } else if !post.skills.isEmpty {
+                    Text(post.skills.map(\.name).joined(separator: " · "))
+                        .font(Theme.Typography.meta).foregroundStyle(Theme.ink).lineLimit(1)
                 }
             }
-            .buttonStyle(.plain)
-
-            Divider().padding(.vertical, 14)
-
-            // Engagement row sits OUTSIDE the link so the heart is independently tappable.
-            HStack(spacing: 22) {
-                Button {
-                    withAnimation(.snappy) { store.toggleAppreciation(post.id) }
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: post.likedByMe ? "heart.fill" : "heart")
-                            .foregroundStyle(post.likedByMe ? Theme.softPink : .secondary)
-                        Text("\(post.appreciations)")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                    }
-                }
-                .buttonStyle(.plain)
-
-                HStack(spacing: 7) {
-                    Image(systemName: "bubble.left").foregroundStyle(.secondary)
-                    Text("\(post.comments.count)")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                }
-
-                Spacer()
-
-                NavigationLink {
-                    PostDetailView(store: store, postID: post.id)
-                } label: {
-                    HStack(spacing: 5) {
-                        Text("Open").font(.system(size: 12, weight: .semibold))
-                        Image(systemName: "arrow.up.right").font(.system(size: 10))
-                    }
-                    .foregroundStyle(Theme.accent)
-                }
-                .buttonStyle(.plain)
-            }
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(18)
-        .background(Theme.surface)
-        .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.card))
     }
-}
-
-// MARK: - Preview
-
-#Preview {
-    CommunityView()
 }

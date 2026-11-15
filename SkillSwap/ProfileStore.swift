@@ -79,8 +79,6 @@ final class ProfileStore: ObservableObject {
             hasLoaded = true
 
         } catch {
-            // Full detail to the dev console; a safe, generic message to the user.
-            print("[ProfileStore] load failed:", error)
             loadError = "We couldn't load your profile. Please try again."
         }
     }

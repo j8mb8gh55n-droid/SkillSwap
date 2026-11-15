@@ -166,19 +166,13 @@ struct RequestExchangeView: View {
                 dismiss()
             } label: {
 
-                Image(systemName: "arrow.left")
-                    .font(
-                        .system(
-                            size: 17,
-                            weight: .semibold
-                        )
-                    )
+                BackChevron()
                     .foregroundStyle(ink)
                     .frame(width: 44, height: 44)
-                    .background(Theme.surface)
-                    .clipShape(Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Back")
 
             VStack(alignment: .leading, spacing: 7) {
 

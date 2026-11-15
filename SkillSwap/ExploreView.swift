@@ -4,8 +4,7 @@
 //
 //  Explore — skill discovery, redesigned to match the approved Home visual
 //  system (SF Pro, soft pastel gradients, lavender atmosphere, reused student
-//  cards). Students & featured skills come from the shared MockData roster
-//  (same source as Home). Mutual-match uses the signed-in user's real skills.
+//  cards). Discovery and featured skills use the authenticated Supabase catalog.
 //
 
 import SwiftUI
@@ -14,93 +13,55 @@ struct ExploreView: View {
 
     // MARK: - State
 
-    @State private var searchText = ""
-    @State private var selectedCategory = "All"
+    @State private var filters = ExploreFilters()
     @State private var showFilters = false
-    @State private var selectedSkill: SkillSelection?
+    @State private var catalog: [CatalogSkill]?
+    @State private var isLoadingCatalog = false
+    @State private var catalogLoadFailed = false
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var directory: StudentDirectory
 
-    /// Real profile (for mutual-match). Roster is now REAL (Supabase).
-    @StateObject private var profile = ProfileStore()
+    @StateObject private var matchStore = ExploreMatchStore(fetch: ProfileService().fetchMyExploreSkills)
+    @State private var matchDetails: MatchDetails?
 
-    private var profileInitials: String {
-        profile.fullName.split(separator: " ")
-            .prefix(2).compactMap { $0.first }.map(String.init).joined().uppercased()
+    private struct MatchDetails: Identifiable {
+        let id: String
+        let name: String
+        let match: ExploreSkillMatch
     }
 
     private let categories = ["All", "Technology", "Design", "Academics", "Languages", "Creative"]
 
-    private let gridColumns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
-    ]
-
     // MARK: - Data (real students + featured skill tiles)
 
-    private var skills: [DemandSkill] { MockData.skillsInDemand }
+    private let discoveryService = StudentDiscoveryService()
 
     // MARK: - Filtering
 
-    private var query: String { searchText.trimmingCharacters(in: .whitespacesAndNewlines) }
-
-    private var filteredStudents: [DiscoveredStudent] {
-        directory.students.filter { s in
-            let matchesCategory = selectedCategory == "All" || s.categories.contains(selectedCategory)
-            let matchesSearch = query.isEmpty
-                || s.name.localizedCaseInsensitiveContains(query)
-                || s.major.localizedCaseInsensitiveContains(query)
-                || s.teaches.contains { $0.name.localizedCaseInsensitiveContains(query) }
-                || s.learns.contains { $0.name.localizedCaseInsensitiveContains(query) }
-            return matchesCategory && matchesSearch
-        }
+    private var discoverableStudents: [DiscoveredStudent] {
+        directory.students.filter { !$0.teaches.isEmpty || !$0.learns.isEmpty }
     }
 
-    private var filteredSkills: [DemandSkill] {
-        skills.filter { d in
-            let matchesCategory = selectedCategory == "All" || d.category == selectedCategory
-            let matchesSearch = query.isEmpty
-                || d.skill.localizedCaseInsensitiveContains(query)
-                || d.category.localizedCaseInsensitiveContains(query)
-            return matchesCategory && matchesSearch
-        }
+    private var studentMatches: [String: ExploreSkillMatch] {
+        guard let skills = matchStore.skills else { return [:] }
+        return Dictionary(directory.students.map { ($0.id, skills.match($0)) },
+                          uniquingKeysWith: { first, _ in first })
     }
 
-    // MARK: - Mutual match (real user skills)
-
-    private var myTeaching: [String] { parse(profile.teachingSkills) }
-    private var myLearning: [String] { parse(profile.learningSkills) }
-
-    private func parse(_ v: String) -> [String] {
-        v.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    }
-
-    private func matchInfo(for s: DiscoveredStudent) -> (label: String, priority: Int)? {
-        let teachesWhatIWant = s.teaches.contains { t in
-            myLearning.contains { $0.localizedCaseInsensitiveCompare(t.name) == .orderedSame }
-        }
-        let wantsWhatITeach = s.learns.contains { l in
-            myTeaching.contains { $0.localizedCaseInsensitiveCompare(l.name) == .orderedSame }
-        }
-        if teachesWhatIWant && wantsWhatITeach { return ("Mutual match", 3) }
-        if teachesWhatIWant { return ("Teaches what you want", 2) }
-        if wantsWhatITeach { return ("Wants what you teach", 1) }
-        return nil
-    }
-
-    private var rankedStudents: [DiscoveredStudent] {
-        filteredStudents.enumerated().sorted { a, b in
-            let pa = matchInfo(for: a.element)?.priority ?? 0
-            let pb = matchInfo(for: b.element)?.priority ?? 0
-            return pa != pb ? pa > pb : a.offset < b.offset
-        }.map(\.element)
+    private var experienceChoices: [SkillExperienceLevel] {
+        let stored = Set(directory.students.flatMap { $0.teachingExperienceBySkillID.values })
+        return SkillExperienceLevel.allCases.filter { stored.contains($0.rawValue) || filters.experience == $0 }
     }
 
     // MARK: - Body
 
     var body: some View {
-        NavigationStack {
+        let matches = studentMatches
+        let eligible = filters.eligibleStudents(in: discoverableStudents, matches: matches)
+        let featured = filters.matchingCatalogSkills(in: catalog ?? [], students: eligible)
+        let results = filters.matchingStudents(in: eligible)
+        return NavigationStack {
             ZStack {
                 AtmosphericBackground(tone: .lavender)
 
@@ -109,27 +70,41 @@ struct ExploreView: View {
                         header
                         searchSection
                         categorySection
-                        if !filteredSkills.isEmpty { featuredSkillsSection }
-                        studentsSection
+                        featuredSkillsSection(featured)
+                        studentsSection(results, matches: matches)
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
-                    .padding(.bottom, 44)
                 }
+                .safeAreaPadding(.bottom, 16)
                 .scrollIndicators(.hidden)
                 .scrollDismissesKeyboard(.interactively)
-                .refreshable { await directory.refresh() }
+                .refreshable {
+                    async let students: Void = directory.refresh()
+                    async let skills: Void = loadCatalog()
+                    async let mySkills: Void = matchStore.refresh()
+                    _ = await (students, skills, mySkills)
+                }
             }
             .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: CatalogSkill.self) { skill in
+                FeaturedSkillDetailView(skill: skill, filters: filters, matchSkills: matchStore.skills)
+            }
         }
-        .task { await profile.loadIfNeeded() }
+        .task { await matchStore.loadIfNeeded() }
         .task { await directory.loadIfNeeded() }
+        .task { if catalog == nil { await loadCatalog() } }
         .onAppear { applyPendingCategory() }
         .onChange(of: router.exploreCategory) { _, _ in applyPendingCategory() }
-        .sheet(isPresented: $showFilters) {
-            filterSheet.presentationDetents([.medium]).presentationDragIndicator(.visible)
+        .onChange(of: directory.isLoading) { _, isLoading in
+            if isLoading { matchDetails = nil }
         }
-        .sheet(item: $selectedSkill) { sel in SkillTagSheet(skill: sel.skill) }
+        .sheet(isPresented: $showFilters) {
+            filterSheet.presentationDetents([.large]).presentationDragIndicator(.visible)
+        }
+        .sheet(item: $matchDetails) { details in
+            matchDetailsSheet(details)
+        }
     }
 
     // MARK: - Header
@@ -152,37 +127,9 @@ struct ExploreView: View {
     private func applyPendingCategory() {
         guard let category = router.exploreCategory else { return }
         if categories.contains(category) {
-            withAnimation(Theme.Motion.standard) { selectedCategory = category }
+            withAnimation(Theme.Motion.standard) { filters.category = category }
         }
         router.exploreCategory = nil
-    }
-
-    private var headerAvatar: some View {
-        Group {
-            if let url = profile.avatarURL.flatMap(URL.init(string:)) {
-                AsyncImage(url: url) { phase in
-                    if let image = phase.image { image.resizable().scaledToFill() }
-                    else { avatarFallback }
-                }
-                .frame(width: 44, height: 44)
-                .clipShape(Circle())
-            } else {
-                avatarFallback
-            }
-        }
-    }
-
-    @ViewBuilder private var avatarFallback: some View {
-        if profileInitials.isEmpty {
-            Image(systemName: "person.fill")
-                .font(.system(size: 17)).foregroundStyle(Theme.primaryAction)
-                .frame(width: 44, height: 44)
-                .background(Theme.brightLavender.opacity(0.35))
-                .background(.ultraThinMaterial, in: Circle())
-                .clipShape(Circle())
-        } else {
-            Monogram(initials: profileInitials, size: 44)
-        }
     }
 
     // MARK: - Search
@@ -191,18 +138,19 @@ struct ExploreView: View {
         HStack(spacing: 10) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").font(.system(size: 16)).foregroundStyle(Theme.mutedStone)
-                TextField("Search skills or students", text: $searchText)
+                TextField("Search skills or students", text: $filters.keyword)
                     .font(.system(size: 15))
                     .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
-                if !searchText.isEmpty {
-                    Button { searchText = "" } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(Theme.mutedStone)
+                if !filters.keyword.isEmpty {
+                    Button { filters.keyword = "" } label: {
+                        Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
                     }
                     .accessibilityLabel("Clear search")
                 }
             }
             .padding(.horizontal, 16)
-            .frame(height: 52)
+            .frame(minHeight: 52)
             .background(Theme.surface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
@@ -210,12 +158,13 @@ struct ExploreView: View {
 
             Button { showFilters = true } label: {
                 Image(systemName: "slider.horizontal.3")
-                    .font(.system(size: 18, weight: .medium)).foregroundStyle(Theme.mutedStone)
+                    .font(.system(size: 18, weight: .medium)).foregroundStyle(Theme.ink)
                     .frame(width: 52, height: 52)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: Theme.Radius.large))
+                    .glassEffect(.clear.tint(Theme.powderBlue.opacity(0.14)), in: .rect(cornerRadius: Theme.Radius.large))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open filters")
+            .accessibilityValue(filters.isActive ? "Filters applied" : "")
         }
     }
 
@@ -225,19 +174,21 @@ struct ExploreView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 9) {
                 ForEach(categories, id: \.self) { category in
-                    let selected = selectedCategory == category
+                    let selected = filters.category == category
                     Button {
-                        withAnimation(Theme.Motion.standard) { selectedCategory = category }
+                        withAnimation(Theme.Motion.standard) { filters.category = category }
                     } label: {
                         Text(category)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(selected ? Theme.charcoal : Theme.mutedStone)
-                            .padding(.horizontal, 16).padding(.vertical, 10)
-                            .background(selected ? Theme.charcoal.opacity(0.08) : Color.white.opacity(0.9))
-                            .clipShape(Capsule())
-                            .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(selected ? Theme.ink : .secondary)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 6)
+                            .frame(minHeight: 44)
+                            .background(selected ? Theme.charcoal.opacity(0.12) : Theme.surface, in: Capsule())
+                            .overlay(Capsule().strokeBorder(Theme.hairline).allowsHitTesting(false))
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
             .padding(.vertical, 2)
@@ -246,56 +197,87 @@ struct ExploreView: View {
 
     // MARK: - Featured Skills
 
-    private var featuredSkillsSection: some View {
+    private func loadCatalog() async {
+        guard !isLoadingCatalog else { return }
+        isLoadingCatalog = true
+        catalogLoadFailed = false
+        defer { isLoadingCatalog = false }
+        do {
+            let skills = try await discoveryService.fetchCatalog()
+            try Task.checkCancellation()
+            catalog = skills
+        } catch {
+            catalogLoadFailed = !Task.isCancelled
+        }
+    }
+
+    @ViewBuilder
+    private func featuredSkillsSection(_ skills: [CatalogSkill]) -> some View {
+        if !skills.isEmpty || catalogLoadFailed || catalog == nil || catalog?.isEmpty == true {
+            featuredSkillsContent(skills)
+        }
+    }
+
+    private func featuredSkillsContent(_ skills: [CatalogSkill]) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             EditorialSectionHeader(title: "Featured Skills")
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 14) {
-                    ForEach(Array(filteredSkills.enumerated()), id: \.element.id) { i, d in
-                        Button { selectedSkill = SkillSelection(id: d.skill) } label: {
-                            skillCard(d, colors: HomeGradients.pair(i))
+            if catalogLoadFailed {
+                messageState(
+                    title: catalog == nil ? "Couldn't load featured skills" : "Couldn't refresh featured skills",
+                    message: catalog == nil ? "Check your connection and try again." : "Showing the last loaded skills.",
+                    retry: { await loadCatalog() }
+                )
+            } else if catalog == nil {
+                loadingState
+            } else if catalog?.isEmpty == true {
+                messageState(title: "No featured skills yet", message: "The skill catalog is empty.")
+            }
+
+            if !skills.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(Array(skills.enumerated()), id: \.element.id) { index, skill in
+                            NavigationLink(value: skill) {
+                                skillCard(skill, colors: HomeGradients.pair(index))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
                     }
+                    .padding(.vertical, 2).padding(.bottom, 4)
                 }
-                .padding(.vertical, 2).padding(.bottom, 4)
             }
         }
     }
 
-    private func skillCard(_ d: DemandSkill, colors: [Color]) -> some View {
-        ZStack {
-            richSkillGradient(colors)
+    private func skillCard(_ skill: CatalogSkill, colors: [Color]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(skill.category.uppercased())
+                .font(.caption2.weight(.bold)).tracking(0.8)
+                .foregroundStyle(Theme.onPastel.opacity(0.8))
+                .fixedSize(horizontal: false, vertical: true)
 
-            // Category label — toward the top.
-            Text(d.category.uppercased())
-                .font(.system(size: 10, weight: .bold)).tracking(0.8)
-                .foregroundStyle(Theme.charcoal.opacity(0.6))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                .padding(16)
-
-            // Large, elegant translucent illustration — central/upper.
-            Image(systemName: skillSymbol(d.category))
+            Image(systemName: skillSymbol(skill.category))
                 .font(.system(size: 54, weight: .light))
-                .foregroundStyle(.white.opacity(0.55))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                .offset(y: -8)
+                .foregroundStyle(Theme.onPastel.opacity(0.38))
+                .frame(maxWidth: .infinity, minHeight: 66)
+                .accessibilityHidden(true)
 
-            // Skill name — near the bottom; wraps without changing height.
-            Text(d.skill)
-                .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
-                .lineLimit(2).minimumScaleFactor(0.85).fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(16)
+            Spacer(minLength: 0)
+
+            Text(skill.name)
+                .font(.headline)
+                .foregroundStyle(Theme.onPastel)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .frame(width: 152, height: 180)
+        .padding(16)
+        .frame(width: 152)
+        .frame(minHeight: 180, alignment: .topLeading)
+        .background(richSkillGradient(colors))
         .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(.white.opacity(0.4), lineWidth: 1))
         .softCardShadow()
     }
 
-    /// Slightly richer 3-stop pastel blend for Featured Skills.
     private func richSkillGradient(_ colors: [Color]) -> LinearGradient {
         let a = colors[0]
         let b = colors.count > 1 ? colors[1] : colors[0]
@@ -315,50 +297,170 @@ struct ExploreView: View {
 
     // MARK: - Students
 
-    private var studentsSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Students").font(Theme.Typography.title).foregroundStyle(Theme.charcoal)
-                    Text("\(filteredStudents.count) to discover")
+    private func studentsSection(
+        _ results: [DiscoveredStudent], matches: [String: ExploreSkillMatch]
+    ) -> some View {
+        let checkingMutual = filters.mutualOnly && matchStore.skills == nil
+        let state = ExploreFilters.resultsState(
+            hasLoaded: directory.hasLoaded,
+            isLoading: directory.isLoading,
+            hasError: directory.loadError != nil,
+            hasStudents: !discoverableStudents.isEmpty,
+            matchCount: results.count
+        )
+
+        return VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Students").font(Theme.Typography.title).foregroundStyle(Theme.charcoal)
+                if directory.hasLoaded && !directory.isLoading && directory.loadError == nil && !checkingMutual {
+                    Text(results.count == 1 ? "1 student" : "\(results.count) students")
                         .font(Theme.Typography.meta).foregroundStyle(Theme.mutedStone)
-                }
-                Spacer()
-                if selectedCategory != "All" || !searchText.isEmpty {
-                    Button("Clear") {
-                        withAnimation(Theme.Motion.standard) { searchText = ""; selectedCategory = "All" }
-                    }
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primaryAction)
                 }
             }
 
-            if directory.isLoading && directory.students.isEmpty {
-                loadingState
-            } else if let err = directory.loadError, directory.students.isEmpty {
-                messageState(title: "Couldn't load students", message: err, retry: true)
-            } else if directory.students.isEmpty {
-                messageState(title: "No students yet",
-                             message: "Once other students join, they'll appear here.", retry: false)
-            } else if filteredStudents.isEmpty {
-                emptyState
+            if let error = directory.loadError {
+                messageState(
+                    title: "Couldn't load students",
+                    message: error,
+                    retry: { await directory.refresh() }
+                )
+            }
+
+            if matchStore.loadFailed {
+                messageState(title: "Couldn't check skill matches",
+                             message: "Try again to load your teaching and learning skills.",
+                             retry: { await matchStore.refresh() })
+            }
+
+            if checkingMutual {
+                if !matchStore.loadFailed { loadingState }
             } else {
-                LazyVGrid(columns: gridColumns, spacing: 14) {
-                    ForEach(rankedStudents) { s in
-                        let i = directory.students.firstIndex(where: { $0.id == s.id }) ?? 0
-                        NavigationLink { studentDestination(s) } label: {
-                            HomeStudentCard(
-                                student: s.card(colorIndex: i),
-                                colors: HomeGradients.studentPair(i),
-                                style: .gem,
-                                matchLabel: matchInfo(for: s)?.label
-                            )
-                        }
-                        .buttonStyle(.plain)
-                        .overlay(alignment: .topTrailing) { BookmarkButton(studentID: s.id).padding(10) }
-                    }
+                studentResults(state, students: results, matches: matches)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func studentResults(
+        _ state: ExploreFilters.ResultsState, students: [DiscoveredStudent], matches: [String: ExploreSkillMatch]
+    ) -> some View {
+        switch state {
+        case .loading:
+            loadingState
+        case .unavailable:
+            EmptyView()
+        case .emptyDirectory:
+            messageState(title: "No students to discover yet",
+                         message: "Students will appear here after they add skills to their profiles.")
+        case .noMatches:
+            emptyState
+        case .results:
+            LazyVStack(spacing: 12) {
+                ForEach(ExploreSkillMatch.ranked(students, matches: matches)) { student in
+                    resultCard(student, match: matches[student.id])
                 }
             }
         }
+    }
+
+    private func resultCard(_ student: DiscoveredStudent, match: ExploreSkillMatch?) -> some View {
+        let teachingSkill = match?.theyTeach.first ?? student.teaches.first
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 6) {
+                NavigationLink {
+                    studentDestination(student).toolbarVisibility(.hidden, for: .tabBar)
+                } label: {
+                    HStack(alignment: .top, spacing: 10) {
+                        DiscoveryStudentAvatar(student: student)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(student.name).font(.headline)
+                                .fixedSize(horizontal: false, vertical: true)
+                            if !student.major.isEmpty {
+                                Text(student.major).font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
+                            if match?.isMutual == true {
+                                Text("Mutual Match")
+                                    .font(.caption.weight(.semibold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, 8).padding(.vertical, 4)
+                                    .glassEffect(.regular.tint(Theme.mint.opacity(0.27)), in: .capsule)
+                            }
+                            if let teachingSkill {
+                                Text(teachingSkill.name)
+                                    .font(.subheadline.weight(.semibold))
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .padding(.horizontal, 9).padding(.vertical, 5)
+                                    .background(Theme.surface, in: Capsule())
+                                    .accessibilityLabel("Teaches \(teachingSkill.name)")
+                            }
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                BookmarkButton(studentID: student.id, minimumTarget: 44)
+            }
+
+            if let match, match.hasMultipleSkills {
+                Button {
+                    matchDetails = MatchDetails(id: student.id, name: student.name, match: match)
+                } label: {
+                    Text("All matching skills")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(minHeight: 44, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .tint(Theme.ink)
+                .accessibilityLabel("All matching skills with \(student.name)")
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .foregroundStyle(Theme.ink)
+        .background {
+            GeometryReader { bounds in
+                StudentCardBackground(imageURL: student.avatarURL,
+                                      fallbackColors: [Theme.neutralSurface, Theme.surface])
+                    .frame(width: bounds.size.width, height: bounds.size.height)
+                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: Theme.Radius.large)
+                            .fill(Theme.warmIvory.opacity(0.64))
+                    }
+            }
+            .allowsHitTesting(false)
+        }
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).strokeBorder(Theme.hairline)
+            .allowsHitTesting(false))
+    }
+
+    private func matchDetailsSheet(_ details: MatchDetails) -> some View {
+        NavigationStack {
+            List {
+                if !details.match.theyTeach.isEmpty {
+                    Section("They can teach you") {
+                        ForEach(details.match.theyTeach) { Text($0.name) }
+                    }
+                }
+                if !details.match.youTeach.isEmpty {
+                    Section("You can teach them") {
+                        ForEach(details.match.youTeach) { Text($0.name) }
+                    }
+                }
+            }
+            .navigationTitle(details.name)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { matchDetails = nil }
+                }
+            }
+        }
+        .presentationDragIndicator(.visible)
     }
 
     private func studentDestination(_ s: DiscoveredStudent) -> StudentProfileView {
@@ -370,13 +472,13 @@ struct ExploreView: View {
             .padding(.vertical, 40)
     }
 
-    private func messageState(title: String, message: String, retry: Bool) -> some View {
+    private func messageState(title: String, message: String, retry: (() async -> Void)? = nil) -> some View {
         VStack(spacing: 10) {
             Text(title).font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
             Text(message).font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
                 .multilineTextAlignment(.center)
-            if retry {
-                Button { Task { await directory.load() } } label: {
+            if let retry {
+                Button { Task { await retry() } } label: {
                     Text("Try Again").font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                         .padding(.horizontal, 20).padding(.vertical, 12)
                         .background(Theme.primaryAction).clipShape(Capsule())
@@ -396,14 +498,16 @@ struct ExploreView: View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 30)).foregroundStyle(Theme.primaryAction)
-            Text("Nothing here just yet").font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
-            Text("Try another skill or explore all categories.")
+            Text(filters.mutualOnly ? "No mutual matches" : "No matches").font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
+            Text(filters.mutualOnly
+                 ? "A mutual match needs a skill you can teach each other. Try clearing filters or updating your skills."
+                 : "Try another search or clear your filters.")
                 .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
                 .multilineTextAlignment(.center)
             Button {
-                withAnimation(Theme.Motion.standard) { searchText = ""; selectedCategory = "All" }
+                clearFilters()
             } label: {
-                Text("Explore everything")
+                Text("Clear all filters")
                     .font(.system(size: 14, weight: .semibold)).foregroundStyle(.white)
                     .padding(.horizontal, 20).padding(.vertical, 12)
                     .background(Theme.primaryAction).clipShape(Capsule())
@@ -420,43 +524,68 @@ struct ExploreView: View {
 
     // MARK: - Filter Sheet
 
-    private var filterSheet: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Filter by category").font(.system(size: 22, weight: .bold)).foregroundStyle(Theme.charcoal)
+    private func clearFilters() {
+        withAnimation(Theme.Motion.standard) { filters.clear() }
+    }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(categories, id: \.self) { category in
-                    let selected = selectedCategory == category
-                    Button {
-                        selectedCategory = category; showFilters = false
-                    } label: {
-                        Text(category)
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(selected ? Theme.charcoal : Theme.mutedStone)
-                            .frame(maxWidth: .infinity).padding(.vertical, 15)
-                            .background(selected ? Theme.charcoal.opacity(0.08) : Theme.surface)
-                            .clipShape(RoundedRectangle(cornerRadius: 14))
-                            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.hairline, lineWidth: 1))
+    private var filterSheet: some View {
+        NavigationStack {
+            Form {
+                Section("Skills") {
+                    Picker("Category", selection: $filters.category) {
+                        ForEach(categories, id: \.self) { Text($0).tag($0) }
                     }
-                    .buttonStyle(.plain)
+                    Picker("Direction", selection: Binding(
+                        get: { filters.direction },
+                        set: { filters.selectDirection($0) }
+                    )) {
+                        ForEach(ExploreFilters.Direction.allCases, id: \.self) { direction in
+                            Text(direction.rawValue).tag(direction)
+                        }
+                    }
+                    Picker("Teaching experience", selection: $filters.experience) {
+                        Text("Any level").tag(nil as SkillExperienceLevel?)
+                        ForEach(experienceChoices) { level in
+                            Text(level.label).tag(Optional(level))
+                        }
+                    }
+                    .disabled(filters.direction == .learns || experienceChoices.isEmpty)
+
+                    if filters.direction == .learns {
+                        Text("Experience applies to skills students teach.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    } else if experienceChoices.isEmpty {
+                        Text(directory.hasLoaded ? "No teaching experience levels are listed yet."
+                             : "Experience levels appear after students load.")
+                            .font(.footnote).foregroundStyle(.secondary)
+                    }
+                }
+
+                Section("Matching") {
+                    Toggle("Mutual Matches Only", isOn: $filters.mutualOnly)
+                }
+
+                Section("Availability") {
+                    Toggle("Accepting exchange requests only", isOn: $filters.acceptingRequestsOnly)
+                }
+
+                Section {
+                    Button("Clear all filters", action: clearFilters)
+                        .disabled(!filters.isActive)
                 }
             }
-
-            Spacer()
-
-            Button {
-                selectedCategory = "All"; searchText = ""; showFilters = false
-            } label: {
-                Text("Clear all filters")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity).padding(16)
-                    .background(Theme.primaryAction).clipShape(Capsule())
+            .scrollContentBackground(.hidden)
+            .background(Theme.warmIvory)
+            .navigationTitle("Explore filters")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { showFilters = false }
+                }
             }
-            .buttonStyle(.plain)
         }
-        .padding(24)
-        .background(Theme.warmIvory)
     }
+
 }
 
 // MARK: - Preview

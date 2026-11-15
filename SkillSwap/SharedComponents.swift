@@ -447,3 +447,12 @@ struct SkillPillWrap: View {
         }
     }
 }
+
+struct BackChevron: View {
+    @Environment(\.layoutDirection) private var layoutDirection
+
+    var body: some View {
+        Image(systemName: layoutDirection == .rightToLeft ? "chevron.right" : "chevron.left")
+            .font(.system(size: 16, weight: .semibold))
+    }
+}

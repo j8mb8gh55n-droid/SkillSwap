@@ -159,11 +159,10 @@ struct SignUpView: View {
                         dismiss()
                     } label: {
 
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 18, weight: .medium))
+                        BackChevron()
                             .foregroundStyle(Theme.charcoal)
                             .frame(width: 48, height: 48)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .glassEffect(.regular.interactive(), in: .circle)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Back")

@@ -1,271 +1,207 @@
-//
-//  HomeView.swift
-//  SkillSwap
-//
-//  Soft Chromatic iOS — refinement pass. SF Pro, soft lavender static
-//  atmosphere, continuous-blend cards, compact app-like density. Visual only —
-//  no services, models, queries, or navigation architecture changed. Removed:
-//  Skill Chemistry, Skill Roulette, promotional hero, Upcoming placeholder,
-//  redundant Quick Actions.
-//
-
 import SwiftUI
 
 struct HomeView: View {
-
-    // MARK: - Profile (real, for personalization + skill editing)
-
+    @Environment(\.colorScheme) private var appearance
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var directory: StudentDirectory
-    @StateObject private var profile = ProfileStore()
+    @StateObject private var community = CommunityStore()
 
     @State private var unreadNotifications = 0
     private let notifications = NotificationService()
-
-    // MARK: - Derived content
-
-    private var firstName: String {
-        profile.fullName.split(separator: " ").first.map(String.init) ?? ""
+    private var coolAccent: Color {
+        appearance == .dark ? Theme.powderBlue : Color(red: 0.29, green: 0.34, blue: 0.49)
     }
-    private var profileInitials: String {
-        profile.fullName.split(separator: " ")
-            .prefix(2).compactMap { $0.first }.map(String.init).joined().uppercased()
-    }
-    private var timeWord: String {
-        switch Calendar.current.component(.hour, from: Date()) {
-        case 5..<12:  return "Good morning"
-        case 12..<17: return "Good afternoon"
-        default:      return "Good evening"
-        }
-    }
-    /// Personalized greeting for the signed-in student; graceful fallback
-    /// ("Good morning!") when the name isn't available.
-    private var greetingLine: String {
-        firstName.isEmpty ? "\(timeWord)!" : "\(timeWord), \(firstName)!"
-    }
-    private var teachingSkillsList: [String] {
-        profile.teachingSkills.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    }
-    private var learningSkillsList: [String] {
-        profile.learningSkills.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-    }
-    private var hasAnySkills: Bool { !teachingSkillsList.isEmpty || !learningSkillsList.isEmpty }
-
-    // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ZStack {
-                // Static lavender atmosphere (set enabled: false for plain ivory).
                 AtmosphericBackground(tone: .lavender, enabled: true)
-
+                    .overlay(alignment: .top) {
+                        LinearGradient(colors: [Theme.powderBlue.opacity(appearance == .dark ? 0.035 : 0.13), .clear],
+                                       startPoint: .top, endPoint: .bottom)
+                            .frame(height: 260)
+                            .frame(maxHeight: .infinity, alignment: .top)
+                            .ignoresSafeArea(edges: .top)
+                            .allowsHitTesting(false)
+                    }
+                    .accessibilityHidden(true)
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 26) {
+                    VStack(alignment: .leading, spacing: 24) {
                         header
-                        categoriesSection
-                        skillSpaceSection
-                        CommunitySpotlightSection()
-                        featuredStudentsSection
+                        recommendedStudents
                         HomeSkillsInDemand()
-                        HomeHiddenGems()
-                        footer
+                        communityPreview
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 6)
-                    .padding(.bottom, 44)
                 }
+                .safeAreaPadding(.bottom, 16)
                 .scrollIndicators(.hidden)
+                .refreshable {
+                    async let roster: Void = directory.refresh()
+                    async let posts: Void = community.refresh()
+                    _ = await (roster, posts)
+                    await refreshNotifications()
+                }
             }
+            .tint(Theme.ink)
             .toolbar(.hidden, for: .navigationBar)
         }
-        // Reload on appear so the greeting reflects name edits made in Profile,
-        // and the unread badge refreshes when returning from NotificationsView.
-        .onAppear {
-            Task {
-                await profile.load()
-                unreadNotifications = (try? await notifications.unreadCount()) ?? 0
-            }
-        }
         .task { await directory.loadIfNeeded() }
+        .task { await community.loadIfNeeded() }
+        .onAppear { Task { await refreshNotifications() } }
+        .onChange(of: router.tab) { _, tab in
+            if tab == .home { Task { await community.refresh() } }
+        }
     }
 
-    // MARK: - Header (compact, glass shortcuts)
+    private func refreshNotifications() async {
+        if let count = try? await notifications.unreadCount() {
+            unreadNotifications = count
+        }
+    }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Text(greetingLine)
-                .font(Theme.Typography.displayLarge).foregroundStyle(Theme.charcoal)
-                .lineLimit(1).minimumScaleFactor(0.7)
+        HStack(spacing: 12) {
+            Text("SkillSwap")
+                .font(Theme.Typography.displayLarge)
+                .foregroundStyle(Theme.ink)
+                .accessibilityAddTraits(.isHeader)
             Spacer()
 
             NavigationLink {
                 NotificationsView()
             } label: {
                 Image(systemName: "bell")
-                    .font(.system(size: 17)).foregroundStyle(Theme.charcoal)
+                    .font(.system(size: 17))
+                    .foregroundStyle(coolAccent)
                     .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassEffect(.clear.tint(Theme.powderBlue.opacity(0.18)), in: .circle)
                     .overlay(alignment: .topTrailing) {
                         if unreadNotifications > 0 {
                             Circle().fill(Theme.primaryAction)
                                 .frame(width: 10, height: 10)
                                 .overlay(Circle().stroke(.white, lineWidth: 1.5))
-                                .offset(x: -2, y: 2)
+                                .offset(x: 2, y: 2)
                         }
                     }
             }
             .buttonStyle(.plain)
             .accessibilityLabel(unreadNotifications > 0 ? "Notifications, \(unreadNotifications) unread" : "Notifications")
         }
-        .padding(.top, 4)
     }
 
-    // MARK: - Explore Skills (bento, name-only)
+    private var recommendedStudents: some View {
+        let students = directory.students.filter { !$0.teaches.isEmpty || !$0.learns.isEmpty }
+        let matches = Dictionary(students.compactMap { student in
+            community.matchSkills.map { (student.id, $0.match(student)) }
+        }, uniquingKeysWith: { first, _ in first })
+        let recommended = ExploreSkillMatch.ranked(students, matches: matches).prefix(6)
 
-    private var categoriesSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            EditorialSectionHeader(title: "Explore Skills")
-
-            HStack(alignment: .top, spacing: 12) {
-                bentoTile("Technology", colors: [Theme.mint, Theme.freshSage, Theme.sage], height: 168)
-                VStack(spacing: 12) {
-                    bentoTile("Design", colors: [Theme.brightLavender, Theme.lilac, Theme.blush], height: 78)
-                    bentoTile("Academics", colors: [Theme.softPeach, Theme.blush, Theme.lilac], height: 78)
-                }
+        return VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Recommended Students") {
+                Button("Explore All") { router.openExplore() }
+                    .buttonStyle(.plain)
             }
-            bentoTile("Languages", colors: [Theme.periwinkle, Theme.lilac, Theme.mint], height: 86)
-        }
-    }
-
-    private func bentoTile(_ title: String, colors: [Color], height: CGFloat) -> some View {
-        Button {
-            router.openExplore(category: title)
-        } label: {
-            ZStack(alignment: .bottomLeading) {
-                HomeGradients.soft(colors)
-                Text(title)
-                    .font(Theme.Typography.title)
-                    .foregroundStyle(Theme.onPastel)
-                    .padding(16)
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: height)
-            .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-            .overlay(
-                RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(.white.opacity(0.4), lineWidth: 1)
-            )
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - Your Skill Space (moved up; real skills + edit action)
-
-    private var skillSpaceSection: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            EditorialSectionHeader(title: "Your Skill Space")
-
-            if hasAnySkills {
-                VStack(spacing: 0) {
-                    skillSpaceRow(symbol: "lightbulb", label: "I can teach",
-                                  value: teachingSkillsList.isEmpty ? "Not set yet" : teachingSkillsList.joined(separator: " · "))
-                    HairlineDivider().padding(.vertical, 12)
-                    skillSpaceRow(symbol: "book", label: "I want to learn",
-                                  value: learningSkillsList.isEmpty ? "Not set yet" : learningSkillsList.joined(separator: " · "))
-                }
-                .padding(16)
-                .background(Theme.surface.opacity(0.5))
-                .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-                .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
-                .softCardShadow()
-            } else {
-                NavigationLink { EditProfileView(store: profile) } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "plus")
-                            .font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.forestGreen)
-                            .frame(width: 44, height: 44)
-                            .background(Theme.mint.opacity(0.4)).clipShape(Circle())
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Add your skills").font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
-                            Text("Tell others what you teach and want to learn.")
-                                .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                        Spacer(minLength: 0)
-                        Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.mutedStone)
+            if directory.isLoading || (!directory.hasLoaded && directory.loadError == nil) {
+                ProgressView().accessibilityLabel("Loading students")
+            } else if let error = directory.loadError {
+                RoundedCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(error).font(Theme.Typography.callout)
+                        Button("Try Again") { Task { await directory.refresh() } }
                     }
-                    .padding(16)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.surface.opacity(0.5))
-                    .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
-                    .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
-                    .softCardShadow()
                 }
-                .buttonStyle(.plain)
+            } else if recommended.isEmpty {
+                Text("No students to recommend yet.")
+                    .font(Theme.Typography.callout).foregroundStyle(.secondary)
+            } else {
+                ScrollView(.horizontal) {
+                    HStack(alignment: .top, spacing: 10) {
+                        ForEach(Array(recommended)) { student in
+                            NavigationLink {
+                                StudentProfileView(student: student)
+                                    .toolbarVisibility(.hidden, for: .tabBar)
+                            } label: {
+                                HomeRecommendationCard(student: student,
+                                                       isMutual: matches[student.id]?.isMutual == true)
+                            }
+                            .buttonStyle(.plain)
+                            .overlay(alignment: .topTrailing) {
+                                BookmarkButton(studentID: student.id, minimumTarget: 44).padding(6)
+                            }
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
             }
         }
     }
 
-    private func skillSpaceRow(symbol: String, label: String, value: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: symbol).font(.system(size: 18)).foregroundStyle(Theme.forestGreen).frame(width: 28)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(label).font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
-                Text(value).font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
-                    .fixedSize(horizontal: false, vertical: true)
+    private var communityPreview: some View {
+        let previews = CommunityFeedFilters().results(from: community.posts, learning: community.learning).prefix(3)
+        return VStack(alignment: .leading, spacing: 12) {
+            sectionTitle("Community for You") {
+                NavigationLink("See All") { CommunityView(store: community) }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("See all Community posts")
             }
-            Spacer()
-        }
-    }
 
-    // MARK: - Featured Students
-
-    @ViewBuilder private var featuredStudentsSection: some View {
-        // Discovery section — real students. Hidden while empty/loading so Home
-        // never shows an empty header.
-        if !directory.students.isEmpty {
-            VStack(alignment: .leading, spacing: 14) {
-                EditorialSectionHeader(title: "Featured Students") {
-                    Button { router.openExplore() } label: {
-                        Text("See all").font(Theme.Typography.callout.weight(.semibold))
-                            .foregroundStyle(Theme.forestGreen)
+            if community.feedError {
+                RoundedCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(community.loaded ? "Couldn’t refresh Community posts." : "Couldn’t load Community posts.")
+                            .font(Theme.Typography.callout)
+                        Button("Try Again") { Task { await community.refresh() } }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            if !community.loaded && !community.feedError {
+                ProgressView().accessibilityLabel("Loading Community posts")
+            } else if community.loaded && previews.isEmpty && !community.feedError {
+                RoundedCard {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Start the conversation").font(Theme.Typography.headline)
+                        Text("Ask a question or share something you’ve learned.")
+                            .font(Theme.Typography.callout).foregroundStyle(.secondary)
+                        NavigationLink("Open Community") { CommunityView(store: community) }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else {
+                ForEach(Array(previews)) { post in
+                    NavigationLink {
+                        PostDetailView(store: community, postID: post.id)
+                    } label: {
+                        CommunityPostCard(post: post, previewLines: 3)
                     }
                     .buttonStyle(.plain)
                 }
-
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .top, spacing: 14) {
-                        ForEach(Array(directory.students.prefix(4).enumerated()), id: \.element.id) { i, s in
-                            NavigationLink { StudentProfileView(student: s) } label: {
-                                HomeStudentCard(student: s.card(colorIndex: i), colors: HomeGradients.studentPair(i), style: .featured)
-                            }
-                            .buttonStyle(.plain)
-                            .overlay(alignment: .topTrailing) { BookmarkButton(studentID: s.id).padding(12) }
-                        }
-                    }
-                    .padding(.vertical, 2)
-                    .padding(.bottom, 6)
-                }
             }
         }
     }
 
-    // MARK: - Footer
-
-    private var footer: some View {
-        VStack(spacing: 12) {
-            HairlineDivider()
-            Text("Made for curious minds.")
-                .font(Theme.Typography.meta).foregroundStyle(Theme.mutedStone)
+    private func sectionTitle<Trailing: View>(
+        _ title: String, @ViewBuilder action: () -> Trailing
+    ) -> some View {
+        let trailing = action().font(Theme.Typography.callout.weight(.semibold))
+            .foregroundStyle(coolAccent)
+            .frame(minHeight: 44)
+            .contentShape(Rectangle())
+        return ViewThatFits(in: .horizontal) {
+            HStack {
+                Text(title).fixedSize(horizontal: true, vertical: false)
+                Spacer(minLength: 8)
+                trailing.fixedSize(horizontal: true, vertical: false)
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title)
+                trailing
+            }
         }
-        .padding(.top, 4)
+        .font(Theme.Typography.title)
+        .foregroundStyle(Theme.ink)
     }
-}
-
-// MARK: - Preview
-
-#Preview {
-    HomeView().environmentObject(AppRouter()).environmentObject(SavedStudentsStore()).environmentObject(StudentDirectory())
 }

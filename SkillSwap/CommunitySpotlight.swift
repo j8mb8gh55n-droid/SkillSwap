@@ -94,7 +94,7 @@ struct SpotlightEntry: Identifiable {
     let student: DiscoveredStudent
 }
 
-// MARK: - Service (RPC + minimal hydration)
+// MARK: - Service
 
 struct SpotlightService {
 
@@ -120,27 +120,17 @@ struct SpotlightService {
         }
     }
 
-    /// Resolve winner ids → display models, reusing the already-loaded directory
-    /// and batch-fetching only the ids it doesn't contain (no N+1).
+    /// Resolve winners only through the eligible discovery directory.
     @MainActor
     func fetch(monthStart: String? = nil, directory: StudentDirectory) async throws
         -> (month: String, entries: [SpotlightEntry]) {
 
         let resp = try await fetchRaw(monthStart: monthStart)
-        await directory.loadIfNeeded()
-
-        let ids = Array(Set(resp.spotlight.map(\.student)))
-        var resolved: [String: DiscoveredStudent] = [:]
-        for id in ids { if let s = directory.student(id: id) { resolved[id] = s } }
-
-        let missing = ids.filter { resolved[$0] == nil }
-        if !missing.isEmpty {
-            for (k, v) in try await hydrate(ids: missing) { resolved[k] = v }
-        }
+        await directory.refresh()
 
         let entries = resp.spotlight.compactMap { row -> SpotlightEntry? in
             guard let cat = SpotlightCategory(rawValue: row.category),
-                  let student = resolved[row.student] else { return nil }
+                  let student = directory.student(id: row.student) else { return nil }
             return SpotlightEntry(category: cat, count: row.count, student: student)
         }
         .sorted { $0.category.order < $1.category.order }
@@ -148,77 +138,7 @@ struct SpotlightService {
         return (resp.month, entries)
     }
 
-    /// One batched fetch (profiles + their teach/learn skills) for ids not in the
-    /// directory — e.g. the signed-in user, whom discovery excludes. Two queries
-    /// total regardless of count.
-    private func hydrate(ids: [String]) async throws -> [String: DiscoveredStudent] {
-        let profiles: [ProfileRow] = try await client
-            .from("profiles")
-            .select("id, full_name, major, bio, avatar_url, availability_status")
-            .in("id", values: ids)
-            .execute().value
 
-        let links: [SkillLink] = try await client
-            .from("student_skills")
-            .select("student_id, skill_type, experience_level, skills ( id, name, category )")
-            .in("student_id", values: ids)
-            .execute().value
-
-        var teachBy: [String: [CatalogSkill]] = [:]
-        var learnBy: [String: [CatalogSkill]] = [:]
-        var levelsBy: [String: [String: String]] = [:]
-        for link in links {
-            guard let s = link.skills else { continue }
-            let ref = CatalogSkill(id: s.id, name: s.name, category: s.category)
-            if link.skillType == "teach" {
-                teachBy[link.studentID, default: []].append(ref)
-                if let lvl = link.experienceLevel { levelsBy[link.studentID, default: [:]][s.name] = lvl }
-            }
-            else if link.skillType == "learn" { learnBy[link.studentID, default: []].append(ref) }
-        }
-
-        var out: [String: DiscoveredStudent] = [:]
-        for p in profiles {
-            let name = (p.fullName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !name.isEmpty else { continue }
-            out[p.id] = DiscoveredStudent(
-                id: p.id, name: name, major: p.major ?? "", bio: p.bio ?? "",
-                avatarURL: (p.avatarURL?.isEmpty == false) ? p.avatarURL : nil,
-                teaches: teachBy[p.id] ?? [], learns: learnBy[p.id] ?? [],
-                teachingLevels: levelsBy[p.id] ?? [:],
-                availabilityStatus: p.availabilityStatus ?? "open"
-            )
-        }
-        return out
-    }
-
-    private struct ProfileRow: Decodable {
-        let id: String
-        let fullName: String?
-        let major: String?
-        let bio: String?
-        let avatarURL: String?
-        let availabilityStatus: String?
-        enum CodingKeys: String, CodingKey {
-            case id, major, bio
-            case fullName = "full_name"
-            case avatarURL = "avatar_url"
-            case availabilityStatus = "availability_status"
-        }
-    }
-    private struct SkillLink: Decodable {
-        let studentID: String
-        let skillType: String
-        let experienceLevel: String?
-        let skills: SkillRow?
-        enum CodingKeys: String, CodingKey {
-            case skills
-            case studentID = "student_id"
-            case skillType = "skill_type"
-            case experienceLevel = "experience_level"
-        }
-    }
-    private struct SkillRow: Decodable { let id: Int; let name: String; let category: String }
 }
 
 // MARK: - Store (one load, shared by the Home section and the See-all screen)
@@ -430,9 +350,9 @@ struct CommunitySpotlightView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button { dismiss() } label: {
-                Image(systemName: "arrow.left").font(.system(size: 16, weight: .semibold))
+                BackChevron()
                     .foregroundStyle(Theme.charcoal).frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                    .glassEffect(.regular.interactive(), in: .circle)
             }
             .buttonStyle(.plain).accessibilityLabel("Back")
             Text("Community Spotlight").font(Theme.Typography.displayLarge).foregroundStyle(Theme.charcoal)
