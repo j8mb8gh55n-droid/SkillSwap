@@ -96,7 +96,7 @@ struct MessageRequestsView: View {
                 } else if rows.isEmpty {
                     Text(option == .received ? "No received introductions." : "No sent introductions.")
                         .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.mutedStone)
                         .padding(.vertical, 16)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }

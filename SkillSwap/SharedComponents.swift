@@ -111,14 +111,14 @@ struct PrimaryButton: View {
                 Spacer()
 
                 if isLoading {
-                    ProgressView().tint(.white)
+                    ProgressView().tint(isEnabled ? Color.white : Theme.mutedStone)
                 } else if let systemImage {
                     Image(systemName: systemImage)
                 }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(isEnabled ? Color.white : Theme.mutedStone)
             .padding(19)
-            .background(isEnabled ? Theme.primaryAction : Color.gray.opacity(0.45))
+            .background(isEnabled ? Theme.primaryAction : Theme.neutralSurface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
         }
         .buttonStyle(.plain)
@@ -391,12 +391,12 @@ struct PrimaryActionButton: View {
             HStack {
                 Text(title).font(Theme.Typography.headline)
                 Spacer()
-                if isLoading { ProgressView().tint(.white) }
+                if isLoading { ProgressView().tint(isEnabled ? Color.white : Theme.mutedStone) }
                 else if let systemImage { Image(systemName: systemImage) }
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(isEnabled ? Color.white : Theme.mutedStone)
             .padding(.vertical, 17).padding(.horizontal, 20)
-            .background(isEnabled ? Theme.forestGreen : Theme.mutedStone.opacity(0.4))
+            .background(isEnabled ? Theme.forestGreen : Theme.neutralSurface)
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
         }
         .buttonStyle(.plain)

@@ -119,12 +119,12 @@ struct SkillsAvailabilityView: View {
     private var teachingSection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: "lightbulb.fill").font(.system(size: 14)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: "lightbulb.fill").font(.system(size: 14)).foregroundStyle(Theme.ink)
                 Text("Skills I Teach").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
                 Spacer()
                 Button { picking = .teach } label: {
                     HStack(spacing: 4) { Image(systemName: "plus"); Text("Add") }
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
                 }
                 .buttonStyle(.plain)
             }
@@ -167,7 +167,7 @@ struct SkillsAvailabilityView: View {
                         .lineLimit(1)
                     Image(systemName: "chevron.up.chevron.down").font(.system(size: 9))
                 }
-                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.ink)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(Theme.brightLavender.opacity(0.45)).clipShape(Capsule())
             }
@@ -186,12 +186,12 @@ struct SkillsAvailabilityView: View {
     private func skillSection(title: String, symbol: String, selected: Set<String>, tint: Color, target: PickTarget) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.ink)
                 Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
                 Spacer()
                 Button { picking = target } label: {
                     HStack(spacing: 4) { Image(systemName: "plus"); Text("Add") }
-                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                        .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
                 }
                 .buttonStyle(.plain)
             }
@@ -214,7 +214,7 @@ struct SkillsAvailabilityView: View {
     private var availabilitySection: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: "calendar").font(.system(size: 14)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: "calendar").font(.system(size: 14)).foregroundStyle(Theme.ink)
                 Text("Availability").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 68), spacing: 9)], spacing: 9) {
@@ -239,7 +239,7 @@ struct SkillsAvailabilityView: View {
                 DatePicker("To", selection: $endTime, displayedComponents: .hourAndMinute)
             }
             .font(.system(size: 13, weight: .medium))
-            .tint(Theme.primaryAction)
+            .tint(Theme.ink)
             if !timesValid {
                 Text("End time must be after the start time.")
                     .font(.system(size: 12, weight: .medium)).foregroundStyle(.red)
@@ -369,7 +369,7 @@ private struct SkillCatalogPicker: View {
                             }
                             Spacer()
                             if selected.contains(skill.name) {
-                                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.primaryAction)
+                                Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.ink)
                             }
                         }
                     }

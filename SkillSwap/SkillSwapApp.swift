@@ -13,16 +13,11 @@ struct SkillSwapApp: App {
     @StateObject private var authManager = AuthManager()
     @AppStorage("appAppearance") private var appearance = AppAppearance.system.rawValue
 
-    /// Keeps the branded splash on screen for a brief minimum so it doesn't flash
-    /// by. The splash still ends as soon as BOTH this elapses and the session
-    /// check finishes — it never blocks a ready app beyond this short window.
-    @State private var minSplashElapsed = false
-
     var body: some Scene {
         WindowGroup {
             Group {
-                if authManager.isLoading || !minSplashElapsed {
-                    SplashView()
+                if authManager.isLoading {
+                    Color(hex: 0xF6F0E5).ignoresSafeArea()
                 } else if authManager.isAuthenticated {
                     ContentView()
                 } else {
@@ -33,10 +28,6 @@ struct SkillSwapApp: App {
             .preferredColorScheme(AppAppearance(rawValue: appearance)?.colorScheme ?? nil)
             .task {
                 await authManager.checkSession()
-            }
-            .task {
-                try? await Task.sleep(nanoseconds: 1_400_000_000)   // ~1.4s minimum
-                minSplashElapsed = true
             }
         }
     }

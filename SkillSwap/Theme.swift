@@ -56,7 +56,10 @@ enum Theme {
     static let dustyLavender = Color(hex: 0xC9BED8)  // secondary atmosphere
     static let lavenderMist = Color(hex: 0xEAE5F0)   // soft atmospheric background
     static let charcoal     = Color(lightHex: 0x242424, darkHex: 0xF2F2F2)  // primary text
-    static let mutedStone   = Color(lightHex: 0x858585, darkHex: 0x9A9A9A)  // secondary text
+    static let mutedStone   = Color(lightHex: 0x626262, darkHex: 0xADADAD)
+    static let photoSecondary = Color(lightHex: 0x484848, darkHex: 0xD0D0D0)
+    static let photoScrim = warmIvory.opacity(0.76)
+    static let validationText = Color(lightHex: 0xA51D2D, darkHex: 0xFF8790)  // secondary text
     static let hairline     = Color(lightHex: 0x242424, darkHex: 0xFFFFFF).opacity(0.08)
 
     // Neutral system tokens (gray-based UI; pastel cards stay expressive).

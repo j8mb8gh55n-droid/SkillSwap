@@ -7,10 +7,6 @@
 //  created ONLY by database triggers, never by the client). This service does
 //  NOT insert notifications — it can only read its own and flip is_read.
 //
-//  ⚠️ BACKEND PENDING: until phase3_notifications.sql is run in Supabase, the
-//  `notifications` table does not exist and every fetch fails gracefully to an
-//  empty list (no mock data is substituted). See DATA_SOURCES.md / report.
-//
 
 import Foundation
 import Supabase
@@ -20,7 +16,7 @@ struct AppNotification: Identifiable {
     let type: String
     let message: String
     let exchangeID: String?
-    let isRead: Bool
+    var isRead: Bool
     let createdAt: Date?
     let actorName: String?
     let actorAvatarURL: String?
@@ -94,18 +90,25 @@ struct NotificationService {
     }
 
     func markRead(_ id: String) async throws {
-        try await client.from("notifications")
+        let updated: [IDRow] = try await client.from("notifications")
             .update(["is_read": true])
             .eq("id", value: id)
-            .execute()
+            .select("id")
+            .execute().value
+        guard updated.contains(where: { $0.id == id }) else { throw ReadError.notConfirmed }
     }
 
-    func markAllRead() async throws {
-        try await client.from("notifications")
+    func markAllRead() async throws -> Set<String> {
+        let updated: [IDRow] = try await client.from("notifications")
             .update(["is_read": true])
             .eq("is_read", value: false)
-            .execute()
+            .select("id")
+            .execute().value
+        return Set(updated.map(\.id))
     }
+
+    private struct IDRow: Decodable { let id: String }
+    private enum ReadError: Error { case notConfirmed }
 
     nonisolated private static func parseDate(_ iso: String) -> Date? {
         let f1 = ISO8601DateFormatter(); f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

@@ -103,7 +103,7 @@ struct ForgotPasswordView: View {
                     .foregroundStyle(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(step == .request
-                     ? "Enter your university email and we’ll send a recovery code."
+                     ? "Enter your email and we’ll send a recovery code."
                      : "Enter the code from your email and choose a new password.")
                     .font(.system(size: 15)).foregroundStyle(.secondary)
             }
@@ -115,8 +115,8 @@ struct ForgotPasswordView: View {
     private var requestStep: some View {
         VStack(alignment: .leading, spacing: 18) {
 
-            labeledField(title: "UNIVERSITY EMAIL", symbol: "envelope") {
-                TextField("Enter your university email", text: $email)
+            labeledField(title: "EMAIL", symbol: "envelope") {
+                TextField("Enter your email", text: $email, prompt: Text("Enter your email").foregroundStyle(Theme.mutedStone))
                     .textContentType(.username)
                     .keyboardType(.emailAddress)
                     .textInputAutocapitalization(.never)
@@ -145,7 +145,7 @@ struct ForgotPasswordView: View {
         VStack(alignment: .leading, spacing: 18) {
 
             labeledField(title: "RECOVERY CODE", symbol: "number") {
-                TextField("6-digit code", text: $code)
+                TextField("6-digit code", text: $code, prompt: Text("6-digit code").foregroundStyle(Theme.mutedStone))
                     .keyboardType(.numberPad)
                     .textContentType(.oneTimeCode)
             }
@@ -153,9 +153,9 @@ struct ForgotPasswordView: View {
             labeledField(title: "NEW PASSWORD", symbol: "lock") {
                 Group {
                     if showPassword {
-                        TextField("At least 8 characters", text: $newPassword)
+                        TextField("At least 8 characters", text: $newPassword, prompt: Text("At least 8 characters").foregroundStyle(Theme.mutedStone))
                     } else {
-                        SecureField("At least 8 characters", text: $newPassword)
+                        SecureField("At least 8 characters", text: $newPassword, prompt: Text("At least 8 characters").foregroundStyle(Theme.mutedStone))
                     }
                 }
                 .textContentType(.newPassword)
@@ -172,9 +172,9 @@ struct ForgotPasswordView: View {
             labeledField(title: "CONFIRM PASSWORD", symbol: "lock.fill") {
                 Group {
                     if showPassword {
-                        TextField("Re-enter your password", text: $confirmPassword)
+                        TextField("Re-enter your password", text: $confirmPassword, prompt: Text("Re-enter your password").foregroundStyle(Theme.mutedStone))
                     } else {
-                        SecureField("Re-enter your password", text: $confirmPassword)
+                        SecureField("Re-enter your password", text: $confirmPassword, prompt: Text("Re-enter your password").foregroundStyle(Theme.mutedStone))
                     }
                 }
                 .textContentType(.newPassword)

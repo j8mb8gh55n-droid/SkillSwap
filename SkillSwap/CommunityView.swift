@@ -4,8 +4,12 @@ struct CommunityView: View {
     @StateObject private var store: CommunityStore
     @Environment(\.dismiss) private var dismiss
     @State private var filters = CommunityFeedFilters()
-    @State private var showSearch = false
     @State private var showCreate = false
+    @FocusState private var searchFocused: Bool
+
+    private var canCreate: Bool { store.loaded && !store.loading && !store.writing }
+    private let createButtonSize: CGFloat = 54
+    private let createButtonInset: CGFloat = 16
 
     init(store: CommunityStore? = nil) {
         _store = StateObject(wrappedValue: store ?? CommunityStore())
@@ -13,8 +17,9 @@ struct CommunityView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: Theme.Spacing.section) {
+            VStack(alignment: .leading, spacing: 12) {
                 header
+                searchField
                 filterBar
                 feed
             }
@@ -24,73 +29,118 @@ struct CommunityView: View {
         .scrollIndicators(.hidden)
         .scrollDismissesKeyboard(.interactively)
         .refreshable { await store.refresh() }
+        .safeAreaPadding(.bottom, searchFocused ? 0 : createButtonSize + createButtonInset)
+        .overlay(alignment: .bottomTrailing) {
+            if !searchFocused {
+                createButton
+                    .padding(.trailing, Theme.Spacing.screenH)
+                    .padding(.bottom, createButtonInset)
+            }
+        }
         .skillSwapScreen()
         .tint(Theme.ink)
         .toolbar(.hidden, for: .navigationBar)
         .toolbarVisibility(.hidden, for: .tabBar)
         .task { await store.loadIfNeeded() }
-        .sheet(isPresented: $showCreate) {
-            CreatePostView(store: store)
+        .navigationDestination(isPresented: $showCreate) {
+            CreatePostView(store: store, isPushed: true)
+                .navigationBarBackButtonHidden()
+                .toolbarVisibility(.visible, for: .navigationBar)
+                .toolbarVisibility(.hidden, for: .tabBar)
         }
     }
 
     private var header: some View {
-        HStack {
-            Button { dismiss() } label: {
-                BackChevron().frame(width: 44, height: 44)
+        Text("Community")
+            .font(.headline)
+            .multilineTextAlignment(.center)
+            .accessibilityAddTraits(.isHeader)
+            .padding(.horizontal, 52)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .overlay(alignment: .leading) {
+                Button { dismiss() } label: {
+                    BackChevron()
+                        .frame(width: 44, height: 44)
+                        .glassEffect(.regular.interactive(), in: .circle)
+                }
+                .accessibilityLabel("Back")
             }
-            .accessibilityLabel("Back")
-            Text("Community").font(Theme.Typography.displayLarge)
-            Spacer()
-            Button { showSearch.toggle() } label: {
-                Image(systemName: showSearch ? "xmark" : "magnifyingglass")
-                    .frame(width: 44, height: 44)
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.ink)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(Theme.mutedStone)
+                .accessibilityHidden(true)
+            TextField("Search posts or skills", text: $filters.search,
+                      prompt: Text("Search posts or skills").foregroundStyle(Theme.mutedStone))
+                .focused($searchFocused)
+                .submitLabel(.search)
+                .onSubmit { searchFocused = false }
+                .frame(minHeight: 44)
+            if !filters.search.isEmpty {
+                Button { filters.search = "" } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(Theme.mutedStone)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Clear search")
             }
-            .accessibilityLabel(showSearch ? "Hide search" : "Search posts")
-            Button { showCreate = true } label: {
-                Image(systemName: "square.and.pencil")
-                    .frame(width: 44, height: 44)
-                    .background(Theme.lavenderSoft, in: Circle())
-                    .foregroundStyle(Theme.onPastel)
-            }
-            .accessibilityLabel("Create post")
-            .disabled(store.loading || store.writing || !store.loaded)
+        }
+        .padding(.leading, 14)
+        .padding(.trailing, 4)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.small))
+        .overlay(RoundedRectangle(cornerRadius: Theme.Radius.small).strokeBorder(Theme.hairline)
+            .allowsHitTesting(false))
+    }
+
+    private var createButton: some View {
+        Button {
+            guard canCreate, !showCreate else { return }
+            showCreate = true
+        } label: {
+            Image(systemName: "plus")
+                .font(.system(size: 22, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: createButtonSize, height: createButtonSize)
+                .glassEffect(.regular.tint(Theme.lavenderSoft.opacity(0.28)).interactive(), in: .circle)
+                .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .foregroundStyle(Theme.ink)
+        .accessibilityLabel("Create Post")
+        .disabled(!canCreate || showCreate)
+        .opacity(canCreate ? 1 : 0.55)
     }
 
     private var filterBar: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if showSearch {
-                TextField("Search titles, text, and skills", text: $filters.search)
-                    .textFieldStyle(.roundedBorder)
-            } else if !filters.search.isEmpty {
-                Button("Clear search: \(filters.search)") { filters.search = "" }
-                    .font(Theme.Typography.meta)
-            }
+        VStack(alignment: .leading, spacing: 8) {
             Picker("Feed order", selection: $filters.order) {
                 ForEach(CommunityFeedFilters.Order.allCases) { order in
                     Text(order.rawValue).tag(order)
                 }
             }
             .pickerStyle(.segmented)
+            .frame(minHeight: 44)
 
             ScrollView(.horizontal) {
-                HStack(spacing: 12) {
+                HStack(spacing: 8) {
                     Picker("Post type", selection: $filters.kind) {
                         Text("All types").tag(nil as CommunityPostType?)
                         ForEach(CommunityPostType.allCases) { kind in
                             Text(kind.label).tag(Optional(kind))
                         }
                     }
+                    .frame(minHeight: 44)
                     Picker("Skill", selection: $filters.skillID) {
                         Text("All skills").tag(nil as Int?)
                         ForEach(store.skills) { skill in Text(skill.name).tag(Optional(skill.id)) }
                     }
+                    .frame(minHeight: 44)
                     .disabled(store.skills.isEmpty)
-                    Toggle("Saved only", isOn: $filters.savedOnly)
-                        .toggleStyle(.button)
                 }
                 .pickerStyle(.menu)
             }
@@ -102,7 +152,9 @@ struct CommunityView: View {
         if store.feedError {
             VStack(alignment: .leading, spacing: 6) {
                 Text(store.loaded ? "Couldn’t refresh posts." : "Couldn’t load Community.")
-                Button("Try Again") { Task { await store.refresh() } }
+                    .font(Theme.Typography.headline)
+                feedAction("Retry") { Task { await store.refresh() } }
+                    .disabled(store.loading)
             }
         }
         if store.learningError && filters.order == .forYou {
@@ -112,26 +164,43 @@ struct CommunityView: View {
         if store.skillError {
             Button("Retry loading skill filters") { Task { await store.refreshSkills() } }
         }
-        if !store.loaded {
-            if !store.feedError { ProgressView().accessibilityLabel("Loading posts") }
-        } else {
-            let posts = filters.results(from: store.posts, learning: store.learning)
-            if posts.isEmpty {
-                EmptyStateView(systemImage: "text.bubble", title: "No posts to show",
-                               message: "Try clearing your filters or share a post.")
+        let posts = filters.results(from: store.posts, learning: store.learning)
+        if !posts.isEmpty {
+            LazyVStack(spacing: 12) {
+                ForEach(posts) { post in
+                    NavigationLink {
+                        PostDetailView(store: store, postID: post.id)
+                    } label: {
+                        CommunityPostCard(post: post, inFeed: true)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        } else if !store.feedError {
+            if !store.loaded || store.loading {
+                ProgressView("Loading posts")
+            } else if store.posts.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No Community posts yet.").font(Theme.Typography.headline)
+                    Text("Share a question, resource, project, or tip.").foregroundStyle(.secondary)
+                }
             } else {
-                LazyVStack(spacing: 12) {
-                    ForEach(posts) { post in
-                        NavigationLink {
-                            PostDetailView(store: store, postID: post.id)
-                        } label: {
-                            CommunityPostCard(post: post)
-                        }
-                        .buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("No posts match your filters.").font(Theme.Typography.headline)
+                    feedAction("Clear Filters") {
+                        filters = CommunityFeedFilters(order: filters.order)
                     }
                 }
             }
         }
+    }
+
+    private func feedAction(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).frame(minWidth: 44, minHeight: 44)
+        }
+        .buttonStyle(.bordered)
     }
 }
 
@@ -139,6 +208,7 @@ struct CommunityPostCard: View {
     let post: CommunityPostItem
     var previewLines = 2
     var showsSkillChips = false
+    var inFeed = false
 
     var body: some View {
         RoundedCard {
@@ -151,12 +221,27 @@ struct CommunityPostCard: View {
                         Image(systemName: "bookmark.fill").accessibilityLabel("Saved")
                     }
                 }
-                .font(Theme.Typography.meta)
+                .font(inFeed ? Theme.Typography.meta.weight(.semibold) : Theme.Typography.meta)
                 Text(post.title).font(Theme.Typography.headline)
+                    .fixedSize(horizontal: false, vertical: inFeed)
                 Text(post.body).font(Theme.Typography.callout).lineLimit(previewLines)
-                    .foregroundStyle(.secondary)
-                Text(post.author.name).font(Theme.Typography.meta).foregroundStyle(.secondary)
-                if showsSkillChips && !post.skills.isEmpty {
+                    .foregroundStyle(Theme.mutedStone)
+                    .fixedSize(horizontal: false, vertical: inFeed)
+                Text(post.author.name)
+                    .font(inFeed ? Theme.Typography.callout.weight(.medium) : Theme.Typography.meta)
+                    .foregroundStyle(inFeed ? Theme.ink : Theme.mutedStone)
+                if inFeed && !post.skills.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 108), spacing: 6, alignment: .leading)],
+                              alignment: .leading, spacing: 6) {
+                        ForEach(post.skills) { skill in
+                            Text(skill.name)
+                                .font(Theme.Typography.meta)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 8).padding(.vertical, 4)
+                                .background(Theme.neutralSurface, in: Capsule())
+                        }
+                    }
+                } else if showsSkillChips && !post.skills.isEmpty {
                     ScrollView(.horizontal) {
                         HStack(spacing: 6) {
                             ForEach(post.skills) { skill in

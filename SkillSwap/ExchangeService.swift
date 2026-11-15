@@ -76,6 +76,17 @@ struct ExchangeService {
         return rows.map { map($0, me: me) }
     }
 
+    func fetchExchange(id: UUID) async throws -> SkillExchange? {
+        let me = try await client.auth.session.user.id
+        let rows: [ExchangeRow] = try await client
+            .from("exchanges")
+            .select(selectExpr)
+            .eq("id", value: id)
+            .limit(1)
+            .execute().value
+        return rows.first.map { map($0, me: me).asExchange }
+    }
+
     // MARK: - Create exchange (Phase C1)
 
     enum ExchangeCreateError: LocalizedError {

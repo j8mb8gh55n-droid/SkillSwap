@@ -54,7 +54,7 @@ struct ContentView: View {
         }
         #endif
         .environment(\.chatDraftStore, chatDrafts)
-        .tint(Theme.primaryAction)
+        .tint(Theme.ink)
         .environmentObject(router)
         .environmentObject(savedStudents)
         .environmentObject(directory)

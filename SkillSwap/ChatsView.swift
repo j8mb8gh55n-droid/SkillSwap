@@ -27,7 +27,7 @@ struct ChatsView: View {
                     header
                     HStack {
                         Image(systemName: "magnifyingglass").accessibilityHidden(true)
-                        TextField("Search chats", text: $search)
+                        TextField("Search chats", text: $search, prompt: Text("Search chats").foregroundStyle(Theme.mutedStone))
                             .accessibilityLabel("Search chats")
                     }
                     .padding(.horizontal, 14)
@@ -344,7 +344,7 @@ struct ChatSummaryRow: View {
             if conversation.unread {
                 Image(systemName: "circle.fill")
                     .font(.system(size: 8))
-                    .foregroundStyle(Theme.primaryAction)
+                    .foregroundStyle(Theme.ink)
                     .accessibilityLabel("\(conversation.unreadCount) unread")
             }
         }

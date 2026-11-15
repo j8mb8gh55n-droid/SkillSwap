@@ -119,14 +119,18 @@ struct StudentDiscoveryService {
         return students(from: rows)
     }
 
-    func fetchProfile(id: UUID) async throws -> DiscoveredStudent? {
-        try await fetchProfiles(ids: [id]).first
+    func fetchProfile(id: UUID, includingCurrentStudent: Bool = false) async throws -> DiscoveredStudent? {
+        try await fetchProfiles(ids: [id], includingCurrentStudent: includingCurrentStudent).first
     }
 
     func fetchProfiles(ids: Set<UUID>) async throws -> [DiscoveredStudent] {
+        try await fetchProfiles(ids: ids, includingCurrentStudent: false)
+    }
+
+    private func fetchProfiles(ids: Set<UUID>, includingCurrentStudent: Bool) async throws -> [DiscoveredStudent] {
         guard !ids.isEmpty else { return [] }
         let me = try await client.auth.session.user.id
-        let requested = ids.subtracting([me]).map(\.uuidString).sorted()
+        let requested = (includingCurrentStudent ? ids : ids.subtracting([me])).map(\.uuidString).sorted()
         var rows: [ProfileRow] = []
         for start in stride(from: 0, to: requested.count, by: 50) {
             let batch = Array(requested[start..<min(start + 50, requested.count)])

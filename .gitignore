@@ -14,6 +14,7 @@ xcuserdata/
 # ──────────────────────────── Build output ───────────────────────────────
 build/
 DerivedData/
+*.xcarchive
 *.ipa
 *.dSYM.zip
 *.dSYM
@@ -39,3 +40,20 @@ secrets.*
 # ───────────────────────────── Misc / temp ───────────────────────────────
 *.log
 *.tmp
+
+# Local handoff archives and database exports
+/*Handoff*.zip
+/SkillSwap-Private-Backups/
+*.dump
+*.dump.gz
+*.pgdump
+*.backup
+*.sql.gz
+*.sql.bak
+*_dump.sql
+*-dump.sql
+*.key
+*.pfx
+*.cer
+*.der
+*.provisionprofile

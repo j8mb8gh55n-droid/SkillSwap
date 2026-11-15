@@ -19,11 +19,17 @@ final class AuthManager: ObservableObject {
         defer { isLoading = false }
 
         do {
-            _ = try await SupabaseManager.client.auth.session
+            _ = try await AuthDiagnostics.trace("sessionRestoration") {
+                try await SupabaseManager.client.auth.session
+            }
             isAuthenticated = true
         } catch {
             isAuthenticated = false
         }
+    }
+
+    func didSignIn() {
+        isAuthenticated = true
     }
 
     func signOut() async throws {

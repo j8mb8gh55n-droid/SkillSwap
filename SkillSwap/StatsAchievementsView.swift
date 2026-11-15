@@ -84,7 +84,7 @@ struct StatsAchievementsView: View {
     @ViewBuilder private var content: some View {
         switch state {
         case .loading:
-            HStack { Spacer(); ProgressView().tint(Theme.primaryAction); Spacer() }
+            HStack { Spacer(); ProgressView().tint(Theme.ink); Spacer() }
                 .padding(.vertical, 60)
 
         case .failed:
@@ -148,7 +148,7 @@ struct StatsAchievementsView: View {
     private func card<Content: View>(title: String, symbol: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.ink)
                 Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
             }
             content()

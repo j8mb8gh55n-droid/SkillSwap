@@ -108,17 +108,21 @@ struct ProfileService {
 
     func fetchMyProfile() async throws -> LoadedProfile {
 
-        let session = try await client.auth.session
+        let session = try await AuthDiagnostics.trace("profileSession") {
+            try await client.auth.session
+        }
         let uid = session.user.id.uuidString
 
         // 1. profiles row
-        let profileRows: [StudentProfile] = try await client
-            .from("profiles")
-            .select("id, full_name, major, bio, avatar_url, availability_status")
-            .eq("id", value: uid)
-            .limit(1)
-            .execute()
-            .value
+        let profileRows = try await AuthDiagnostics.trace("profiles", status: { $0.status }) {
+            () async throws -> PostgrestResponse<[StudentProfile]> in
+            try await client
+                .from("profiles")
+                .select("id, full_name, major, bio, avatar_url, availability_status")
+                .eq("id", value: uid)
+                .limit(1)
+                .execute()
+        }.value
 
         var loaded = LoadedProfile()
 
@@ -143,12 +147,14 @@ struct ProfileService {
         }
 
         // 2. student_skills joined to the skills catalog (incl. experience level)
-        let skillRows: [StudentSkillRow] = try await client
-            .from("student_skills")
-            .select("skill_type, experience_level, skills(name)")
-            .eq("student_id", value: uid)
-            .execute()
-            .value
+        let skillRows = try await AuthDiagnostics.trace("student_skills", status: { $0.status }) {
+            () async throws -> PostgrestResponse<[StudentSkillRow]> in
+            try await client
+                .from("student_skills")
+                .select("skill_type, experience_level, skills(name)")
+                .eq("student_id", value: uid)
+                .execute()
+        }.value
 
         let teachRows = skillRows.filter { $0.skillType == "teach" }
         loaded.teachingSkills = teachRows.compactMap { $0.skills?.name }
@@ -166,12 +172,14 @@ struct ProfileService {
         )
 
         // 3. availability (days only for the current UI)
-        let availabilityRows: [AvailabilityRow] = try await client
-            .from("availability")
-            .select("day_of_week, start_time, end_time")
-            .eq("student_id", value: uid)
-            .execute()
-            .value
+        let availabilityRows = try await AuthDiagnostics.trace("availability", status: { $0.status }) {
+            () async throws -> PostgrestResponse<[AvailabilityRow]> in
+            try await client
+                .from("availability")
+                .select("day_of_week, start_time, end_time")
+                .eq("student_id", value: uid)
+                .execute()
+        }.value
 
         let uniqueDays = Set(availabilityRows.map(\.dayOfWeek))
         loaded.availabilityDays = orderedDays(uniqueDays)

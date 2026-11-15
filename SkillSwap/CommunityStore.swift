@@ -8,7 +8,7 @@ struct CommunityService {
         let bookmarkJoin = savedOnly ? "!inner" : ""
         return """
         id, author_id, kind, title, body, external_url, created_at, updated_at,
-        author:profiles!community_posts_author_id_fkey(full_name),
+        author:profiles!community_posts_author_id_fkey(full_name, avatar_url),
         tag_links:community_post_skills(skill:skills(id, name)),
         bookmarks:community_saved_posts\(bookmarkJoin)(post_id)
         """
@@ -38,6 +38,17 @@ struct CommunityService {
         let posts: [CommunityPostItem] = try await client.from("community_posts").select(fields())
             .eq("id", value: id).limit(1).execute().value
         return posts.first
+    }
+
+    func fetchRelated(to post: CommunityPostItem, excluding excluded: Set<UUID>) async throws -> [CommunityPostItem] {
+        let skillIDs = post.skills.map(\.id)
+        guard !skillIDs.isEmpty else { return [] }
+        let query = client.from("community_posts")
+            .select(fields() + ", matching_tags:community_post_skills!inner(skill_id)")
+            .in("matching_tags.skill_id", values: skillIDs)
+        for id in excluded { _ = query.neq("id", value: id) }
+        return try await query.order("created_at", ascending: false)
+            .order("id", ascending: false).limit(12).execute().value
     }
 
     func savePost(_ draft: CommunityPostDraft, id: UUID?) async throws -> UUID {
@@ -89,6 +100,7 @@ final class CommunityStore: ObservableObject {
     @Published private(set) var accountID: UUID?
     @Published private(set) var loading = false
     @Published private(set) var loaded = false
+    private(set) var hasFullFeed = false
     @Published private(set) var writing = false
     @Published private(set) var feedError = false
     @Published private(set) var skillError = false
@@ -121,6 +133,22 @@ final class CommunityStore: ObservableObject {
         await refreshScopedPosts(authorID: nil, savedOnly: true)
     }
 
+    func loadRelatedPosts(to post: CommunityPostItem, excluding excluded: Set<UUID>) async {
+        guard !loaded, !loading else { return }
+        loading = true
+        defer { loading = false }
+        do {
+            let viewer = try await SupabaseManager.client.auth.session.user.id
+            let snapshot = try await service.fetchRelated(to: post, excluding: excluded)
+            try Task.checkCancellation()
+            accountID = viewer
+            posts = snapshot
+            loaded = true
+        } catch {
+            // Recommendations are optional when the feed is unavailable.
+        }
+    }
+
     private func refreshScopedPosts(authorID: UUID?, savedOnly: Bool) async {
         guard !loading, !writing else { return }
         loading = true
@@ -134,6 +162,7 @@ final class CommunityStore: ObservableObject {
             try Task.checkCancellation()
             accountID = viewer
             posts = snapshot
+            hasFullFeed = false
             loaded = true
             feedError = false
         } catch {
@@ -147,6 +176,7 @@ final class CommunityStore: ObservableObject {
             let snapshot = try await service.fetchPosts()
             try Task.checkCancellation()
             posts = snapshot
+            hasFullFeed = true
             loaded = true
             feedError = false
         } catch {

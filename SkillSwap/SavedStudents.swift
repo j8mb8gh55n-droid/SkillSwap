@@ -59,7 +59,7 @@ struct BookmarkButton: View {
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(Theme.charcoal)
                 .frame(width: 32, height: 32)
-                .background(.ultraThinMaterial, in: Circle())
+                .background(.regularMaterial, in: Circle())
                 .frame(width: minimumTarget, height: minimumTarget)
                 .contentShape(Rectangle())
         }
@@ -287,7 +287,7 @@ struct KudosReceivedView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     header
                     if isLoading {
-                        HStack { Spacer(); ProgressView().tint(Theme.primaryAction); Spacer() }.padding(.vertical, 40)
+                        HStack { Spacer(); ProgressView().tint(Theme.ink); Spacer() }.padding(.vertical, 40)
                     } else if loadError {
                         emptyState(icon: "exclamationmark.triangle", title: "Couldn't load kudos",
                                    message: "Please try again.")

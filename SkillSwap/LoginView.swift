@@ -108,11 +108,10 @@ struct LoginView: View {
                         dismiss()
                     } label: {
 
-                        Image(systemName: "arrow.left")
-                            .font(.system(size: 18, weight: .medium))
+                        BackChevron()
                             .foregroundStyle(Theme.charcoal)
                             .frame(width: 48, height: 48)
-                            .background(.ultraThinMaterial, in: Circle())
+                            .glassEffect(.regular.interactive(), in: .circle)
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Back")
@@ -145,11 +144,11 @@ struct LoginView: View {
 
                     VStack(alignment: .leading, spacing: 20) {
 
-                        // University Email
+                        // Email
 
                         VStack(alignment: .leading, spacing: 8) {
 
-                            Text("University Email")
+                            Text("Email")
                                 .font(.system(size: 14, weight: .semibold))
 
                             HStack(spacing: 12) {
@@ -159,8 +158,9 @@ struct LoginView: View {
                                     .accessibilityHidden(true)
 
                                 TextField(
-                                    "Enter your university email",
-                                    text: $email
+                                    "Enter your email",
+                                    text: $email,
+                                    prompt: Text("Enter your email").foregroundStyle(Theme.mutedStone)
                                 )
                                 .textContentType(.username)
                                 .keyboardType(.emailAddress)
@@ -193,14 +193,16 @@ struct LoginView: View {
 
                                         TextField(
                                             "Enter your password",
-                                            text: $password
+                                            text: $password,
+                                            prompt: Text("Enter your password").foregroundStyle(Theme.mutedStone)
                                         )
 
                                     } else {
 
                                         SecureField(
                                             "Enter your password",
-                                            text: $password
+                                            text: $password,
+                                            prompt: Text("Enter your password").foregroundStyle(Theme.mutedStone)
                                         )
                                     }
                                 }
@@ -291,10 +293,10 @@ struct LoginView: View {
                                 }
                             }
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(canSubmit || isLoading ? Color.white : Theme.mutedStone)
                             .padding(20)
                             .background(
-                                canSubmit ? Theme.primaryAction : Color.gray.opacity(0.5)
+                                canSubmit || isLoading ? Theme.primaryAction : Theme.neutralSurface
                             )
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 20)
@@ -388,8 +390,6 @@ struct LoginView: View {
 
     // MARK: - Supabase Login
 
-    // MARK: - Supabase Login
-
     private func loginStudent() async {
 
         guard canSubmit else { return }
@@ -399,16 +399,18 @@ struct LoginView: View {
 
         do {
             // Authenticate the student with Supabase
-            _ = try await SupabaseManager.client.auth.signIn(
-                email: trimmedEmail,
-                password: password
-            )
+            _ = try await AuthDiagnostics.trace("signIn") {
+                try await SupabaseManager.client.auth.signIn(
+                    email: trimmedEmail,
+                    password: password
+                )
+            }
 
             // Clear the password after successful login
             password = ""
 
             // Update the app's authentication state
-            await authManager.checkSession()
+            authManager.didSignIn()
 
         } catch {
             activeAlert = .failed(friendlyMessage(for: error))
@@ -417,6 +419,10 @@ struct LoginView: View {
     /// Turns Supabase's technical errors into messages a student understands.
     private func friendlyMessage(for error: Error) -> String {
 
+        if let networkError = error as? URLError, networkError.code == .timedOut {
+            return "Log in took too long. Check your connection and try again."
+        }
+
         let raw = error.localizedDescription.lowercased()
 
         if raw.contains("invalid login credentials") {
@@ -424,7 +430,7 @@ struct LoginView: View {
         }
 
         if raw.contains("email not confirmed") {
-            return "Please confirm your email first. Open the link we sent to your university inbox, then log in."
+            return "Please confirm your email first. Open the link we sent to your inbox, then log in."
         }
 
         if raw.contains("offline")

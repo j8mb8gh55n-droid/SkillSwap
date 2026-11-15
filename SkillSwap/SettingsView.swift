@@ -523,7 +523,7 @@ struct ReportProblemView: View {
                 ZStack(alignment: .topLeading) {
                     if text.isEmpty {
                         Text("Describe what went wrong…").font(.system(size: 14))
-                            .foregroundStyle(.gray.opacity(0.7)).padding(.horizontal, 17).padding(.top, 19)
+                            .foregroundStyle(Theme.mutedStone).padding(.horizontal, 17).padding(.top, 19)
                             .allowsHitTesting(false)
                     }
                     TextEditor(text: $text).font(.system(size: 14)).scrollContentBackground(.hidden)
@@ -616,12 +616,12 @@ struct DeleteAccountView: View {
 
                 // Intentionally non-destructive: disabled control only.
                 Text("Delete My Account")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white)
+                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.mutedStone)
                     .frame(maxWidth: .infinity).padding(18)
-                    .background(Color.gray.opacity(0.4))
+                    .background(Theme.neutralSurface)
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
                     .overlay(alignment: .trailing) {
-                        Image(systemName: "lock.fill").foregroundStyle(.white).padding(.trailing, 18)
+                        Image(systemName: "lock.fill").foregroundStyle(Theme.mutedStone).padding(.trailing, 18)
                     }
             }
             .padding(.horizontal, Theme.Spacing.screenH).padding(.top, 10).padding(.bottom, 40)

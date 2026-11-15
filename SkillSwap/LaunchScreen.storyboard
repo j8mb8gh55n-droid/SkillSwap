@@ -16,27 +16,28 @@
                         <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
                         <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
                         <subviews>
-                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchSymbol" translatesAutoresizingMaskIntoConstraints="NO" id="arr-ow-sym">
-                                <rect key="frame" x="146.5" y="364.5" width="100" height="83"/>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchSymbol" translatesAutoresizingMaskIntoConstraints="NO" id="art-lo-go">
+                                <rect key="frame" x="46.5" y="242" width="300" height="300"/>
                                 <constraints>
-                                    <constraint firstAttribute="width" constant="100" id="wdt-sy-mbl"/>
-                                    <constraint firstAttribute="height" constant="83" id="hgt-sy-mbl"/>
+                                    <constraint firstAttribute="width" constant="300" id="wdt-sy-mbl"/>
+                                    <constraint firstAttribute="height" constant="300" id="hgt-sy-mbl"/>
                                 </constraints>
                             </imageView>
-                            <label opaque="NO" userInteractionEnabled="NO" contentMode="left" horizontalHuggingPriority="251" verticalHuggingPriority="251" text="SkillSwap" textAlignment="center" lineBreakMode="tailTruncation" baselineAdjustment="alignBaselines" adjustsFontSizeToFit="NO" translatesAutoresizingMaskIntoConstraints="NO" id="ttl-la-bel">
-                                <rect key="frame" x="138" y="502.5" width="117" height="41"/>
-                                <fontDescription key="fontDescription" type="system" weight="bold" pointSize="34"/>
-                                <color key="textColor" red="0.1411764706" green="0.1411764706" blue="0.1411764706" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
-                                <nil key="highlightedColor"/>
-                            </label>
+                            <imageView userInteractionEnabled="NO" contentMode="scaleAspectFit" image="LaunchWordmark" translatesAutoresizingMaskIntoConstraints="NO" id="app-word-mark">
+                                <rect key="frame" x="84.5" y="502" width="224" height="54"/>
+                                <constraints>
+                                    <constraint firstAttribute="width" constant="224" id="wordmark-width"/>
+                                    <constraint firstAttribute="height" constant="54" id="wordmark-height"/>
+                                </constraints>
+                            </imageView>
                         </subviews>
                         <viewLayoutGuide key="safeArea" id="6Tk-OE-BBY"/>
-                        <color key="backgroundColor" red="0.83529411764705885" green="0.91372549019607845" blue="0.8784313725490196" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+                        <color key="backgroundColor" red="0.9647058824" green="0.9411764706" blue="0.8980392157" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
                         <constraints>
-                            <constraint firstItem="arr-ow-sym" firstAttribute="centerX" secondItem="6Tk-OE-BBY" secondAttribute="centerX" id="cx-sy-mbl"/>
-                            <constraint firstItem="arr-ow-sym" firstAttribute="centerY" secondItem="6Tk-OE-BBY" secondAttribute="centerY" constant="-40" id="cy-sy-mbl"/>
-                            <constraint firstItem="ttl-la-bel" firstAttribute="top" secondItem="arr-ow-sym" secondAttribute="bottom" constant="22" id="top-la-bel"/>
-                            <constraint firstItem="ttl-la-bel" firstAttribute="centerX" secondItem="6Tk-OE-BBY" secondAttribute="centerX" id="cx-la-bel"/>
+                            <constraint firstItem="art-lo-go" firstAttribute="centerX" secondItem="6Tk-OE-BBY" secondAttribute="centerX" id="cx-sy-mbl"/>
+                            <constraint firstItem="art-lo-go" firstAttribute="centerY" secondItem="6Tk-OE-BBY" secondAttribute="centerY" constant="-47" id="cy-sy-mbl"/>
+                            <constraint firstItem="app-word-mark" firstAttribute="top" secondItem="art-lo-go" secondAttribute="bottom" constant="-40" id="top-la-bel"/>
+                            <constraint firstItem="app-word-mark" firstAttribute="centerX" secondItem="6Tk-OE-BBY" secondAttribute="centerX" id="cx-la-bel"/>
                         </constraints>
                     </view>
                 </viewController>
@@ -46,6 +47,7 @@
         </scene>
     </scenes>
     <resources>
-        <image name="LaunchSymbol" width="538" height="447"/>
+        <image name="LaunchSymbol" width="1254" height="1254"/>
+        <image name="LaunchWordmark" width="224" height="54"/>
     </resources>
 </document>

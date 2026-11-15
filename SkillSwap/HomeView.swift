@@ -70,7 +70,9 @@ struct HomeView: View {
             Spacer()
 
             NavigationLink {
-                NotificationsView()
+                NotificationsView {
+                    Task { await refreshNotifications() }
+                }
             } label: {
                 Image(systemName: "bell")
                     .font(.system(size: 17))
@@ -79,9 +81,9 @@ struct HomeView: View {
                     .glassEffect(.clear.tint(Theme.powderBlue.opacity(0.18)), in: .circle)
                     .overlay(alignment: .topTrailing) {
                         if unreadNotifications > 0 {
-                            Circle().fill(Theme.primaryAction)
+                            Circle().fill(coolAccent)
                                 .frame(width: 10, height: 10)
-                                .overlay(Circle().stroke(.white, lineWidth: 1.5))
+                                .overlay(Circle().stroke(Theme.surface, lineWidth: 1.5))
                                 .offset(x: 2, y: 2)
                         }
                     }

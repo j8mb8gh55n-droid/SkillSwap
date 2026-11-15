@@ -14,6 +14,7 @@ import SwiftUI
 
 struct ProfileView: View {
 
+    @Environment(\.colorScheme) private var appearance
     @EnvironmentObject private var authManager: AuthManager
     @EnvironmentObject private var savedStudents: SavedStudentsStore
     @StateObject private var store = ProfileStore()
@@ -104,6 +105,7 @@ struct ProfileView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 260)
                 .clipped()
+                .overlay { Theme.photoScrim.allowsHitTesting(false) }
                 .mask(
                     LinearGradient(
                         stops: [
@@ -121,7 +123,7 @@ struct ProfileView: View {
                 NavigationLink { SettingsView(store: store) } label: {
                     Image(systemName: "gearshape")
                         .font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.charcoal)
-                        .frame(width: 44, height: 44).background(.ultraThinMaterial, in: Circle())
+                        .frame(width: 44, height: 44).background(.regularMaterial, in: Circle())
                 }
                 .buttonStyle(.plain).accessibilityLabel("Settings")
             }
@@ -142,7 +144,7 @@ struct ProfileView: View {
                     .font(.system(size: 27, weight: .bold)).foregroundStyle(Theme.charcoal)
                     .lineLimit(1).minimumScaleFactor(0.8)
                 Text(displayMajor)
-                    .font(Theme.Typography.callout).foregroundStyle(Theme.charcoal.opacity(0.7))
+                    .font(Theme.Typography.callout).foregroundStyle(Theme.photoSecondary)
             }
             HStack(spacing: 10) {
                 NavigationLink { EditProfileView(store: store) } label: {
@@ -222,9 +224,9 @@ struct ProfileView: View {
         ZStack {
             LinearGradient(colors: bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing)
             if store.fullName.isEmpty {
-                Image(systemName: "person.fill").font(.system(size: size * 0.4)).foregroundStyle(.white)
+                Image(systemName: "person.fill").font(.system(size: size * 0.4)).foregroundStyle(Theme.onPastel)
             } else {
-                Text(initials).font(.system(size: size * 0.32, weight: .bold)).foregroundStyle(.white)
+                Text(initials).font(.system(size: size * 0.32, weight: .bold)).foregroundStyle(Theme.onPastel)
             }
         }
     }
@@ -272,7 +274,7 @@ struct ProfileView: View {
     private var yourImpactCard: some View {
         NavigationLink { StatsAchievementsView() } label: {
             HStack(spacing: 12) {
-                Image(systemName: "chart.bar.fill").font(.system(size: 15)).foregroundStyle(Theme.primaryAction).frame(width: 22)
+                Image(systemName: "chart.bar.fill").font(.system(size: 15)).foregroundStyle(Theme.ink).frame(width: 22)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("Your Impact").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.charcoal)
                     Text("See your stats, achievements & milestones")
@@ -296,7 +298,7 @@ struct ProfileView: View {
     private func section<Content: View>(title: String, symbol: String, @ViewBuilder _ content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 8) {
-                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.ink)
                 Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal)
             }
             content()
@@ -314,7 +316,7 @@ struct ProfileView: View {
             Text(message).font(.system(size: 13)).foregroundStyle(Theme.mutedStone)
             NavigationLink { SkillsAvailabilityView(store: store, scrollTarget: target) } label: {
                 HStack(spacing: 6) { Image(systemName: "plus.circle.fill"); Text(cta) }
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink)
             }
             .buttonStyle(.plain)
         }
@@ -329,12 +331,13 @@ struct ProfileView: View {
                     Text(skill)
                         .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.charcoal)
                     if let level = SkillExperienceLevel.label(forSlug: store.teachingLevels[skill] ?? store.teachingLevels[skill.lowercased()]) {
-                        Text(level).font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.primaryAction)
+                        Text(level).font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.ink)
                     }
                 }
                 .padding(.horizontal, 13).padding(.vertical, 9)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.brightLavender.opacity(0.45)).clipShape(RoundedRectangle(cornerRadius: 14))
+                .background(Theme.brightLavender.opacity(appearance == .dark ? 0.32 : 0.45))
+                .clipShape(RoundedRectangle(cornerRadius: 14))
             }
         }
     }
@@ -346,7 +349,7 @@ struct ProfileView: View {
                     .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.charcoal)
                     .padding(.horizontal, 13).padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(color).clipShape(Capsule())
+                    .background(color.opacity(appearance == .dark ? 0.66 : 1)).clipShape(Capsule())
             }
         }
     }
@@ -372,7 +375,7 @@ struct ProfileView: View {
 
     private func linkRow(icon: String, title: String, trailing: String?) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(Theme.primaryAction).frame(width: 22)
+            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(Theme.ink).frame(width: 22)
             Text(title).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.charcoal)
             Spacer()
             if let trailing { Text(trailing).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.mutedStone) }
@@ -386,7 +389,7 @@ struct ProfileView: View {
     private var manageSkillsLink: some View {
         NavigationLink { SkillsAvailabilityView(store: store) } label: {
             HStack(spacing: 12) {
-                Image(systemName: "slider.horizontal.3").font(.system(size: 15)).foregroundStyle(Theme.primaryAction)
+                Image(systemName: "slider.horizontal.3").font(.system(size: 15)).foregroundStyle(Theme.ink)
                 Text("Manage Skills & Availability").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.charcoal)
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.mutedStone)

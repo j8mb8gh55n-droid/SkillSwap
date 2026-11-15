@@ -46,7 +46,7 @@ struct ProfileCommunitySection: View {
                 ProgressView().accessibilityLabel("Loading Community posts")
             } else if posts.isEmpty {
                 Text("No published posts yet.")
-                    .font(Theme.Typography.callout).foregroundStyle(.secondary)
+                    .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
             }
 
             ForEach(posts.prefix(3)) { post in
@@ -117,7 +117,7 @@ private struct AuthoredCommunityPostsView: View {
                     ProgressView().accessibilityLabel("Loading posts")
                 } else if results.isEmpty {
                     Text(kind == nil ? "No published posts yet." : "No posts of this type.")
-                        .font(Theme.Typography.callout).foregroundStyle(.secondary)
+                        .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone)
                 }
 
                 LazyVStack(spacing: 12) {

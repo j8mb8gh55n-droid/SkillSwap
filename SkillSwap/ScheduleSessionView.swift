@@ -114,7 +114,7 @@ struct ScheduleSessionView: View {
             ZStack {
                 Circle().fill(LinearGradient(colors: bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 44, height: 44)
-                Text(studentInitials).font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
+                Text(studentInitials).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.onPastel)
             }
             VStack(alignment: .leading, spacing: 1) {
                 Text(studentName).font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.charcoal)
@@ -139,7 +139,7 @@ struct ScheduleSessionView: View {
                 DatePicker("Time", selection: $selectedDate, displayedComponents: .hourAndMinute)
                     .datePickerStyle(.compact)
             }
-            .tint(Theme.primaryAction)
+            .tint(Theme.ink)
             .padding(.horizontal, 16).padding(.vertical, 12)
             .background(Theme.surface).clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
             .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).stroke(Theme.hairline, lineWidth: 1))
@@ -204,9 +204,10 @@ struct ScheduleSessionView: View {
             label(selectedFormat == .online ? "Meeting Link" : "Location")
             HStack(spacing: 12) {
                 Image(systemName: selectedFormat == .online ? "link" : "mappin.and.ellipse")
-                    .foregroundStyle(Theme.primaryAction)
-                TextField(selectedFormat == .online ? "Paste a meeting link" : "Enter a meeting place",
-                          text: $meetingDetails)
+                    .foregroundStyle(Theme.ink)
+                let prompt = selectedFormat == .online ? "Paste a meeting link" : "Enter a meeting place"
+                TextField(prompt, text: $meetingDetails,
+                          prompt: Text(prompt).foregroundStyle(Theme.mutedStone))
                     .font(.system(size: 14))
                     .textInputAutocapitalization(selectedFormat == .online ? .never : .sentences)
                     .autocorrectionDisabled(selectedFormat == .online)
@@ -230,8 +231,8 @@ struct ScheduleSessionView: View {
                 Spacer()
                 if isSubmitting { ProgressView().tint(.white) } else { Image(systemName: "arrow.up.right") }
             }
-            .foregroundStyle(.white).padding(18)
-            .background(canSchedule && !isSubmitting ? Theme.primaryAction : Color.gray.opacity(0.4))
+            .foregroundStyle(canSchedule || isSubmitting ? Color.white : Theme.mutedStone).padding(18)
+            .background(canSchedule || isSubmitting ? Theme.primaryAction : Theme.neutralSurface)
             .clipShape(RoundedRectangle(cornerRadius: 18))
         }
         .buttonStyle(.plain)
@@ -271,7 +272,7 @@ struct ScheduleSessionView: View {
     }
 
     private func validationText(_ text: String) -> some View {
-        Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(.red)
+        Text(text).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.validationText)
     }
 }
 

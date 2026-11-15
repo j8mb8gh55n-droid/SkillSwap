@@ -100,7 +100,7 @@ struct ExchangeHistoryView: View {
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(selected ? Theme.charcoal : Theme.mutedStone)
                             .padding(.horizontal, 15).padding(.vertical, 9)
-                            .background(selected ? Theme.charcoal.opacity(0.08) : Color.white.opacity(0.85))
+                            .background(selected ? Theme.neutralSelected : Theme.surface)
                             .clipShape(Capsule())
                             .overlay(Capsule().stroke(Theme.hairline, lineWidth: 1))
                     }

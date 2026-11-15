@@ -234,10 +234,10 @@ struct HomeRecommendationCard: View {
                     .font(Theme.Typography.meta.weight(.semibold))
                     .foregroundStyle(Theme.ink)
                     .padding(.horizontal, 8).padding(.vertical, 4)
-                    .glassEffect(.regular.tint(Theme.mint.opacity(0.27)), in: .capsule)
+                    .glassEffect(.regular.tint(Theme.mint.opacity(0.20)), in: .capsule)
             } else if !student.major.isEmpty {
                 Text(student.major).font(Theme.Typography.meta)
-                    .foregroundStyle(.secondary).lineLimit(2)
+                    .foregroundStyle(Theme.photoSecondary).lineLimit(2)
             }
         }
         .foregroundStyle(Theme.ink)
@@ -252,7 +252,7 @@ struct HomeRecommendationCard: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.tile))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Radius.tile)
-                            .fill(Theme.warmIvory.opacity(0.43))
+                            .fill(Theme.photoScrim)
                     }
             }
             .allowsHitTesting(false)
@@ -275,7 +275,7 @@ struct HomeSkillsInDemand: View {
                 EditorialSectionHeader(title: "Skills in Demand")
                 if !skills.isEmpty {
                     Text("Skills students want to learn")
-                        .font(Theme.Typography.meta).foregroundStyle(.secondary)
+                        .font(Theme.Typography.meta).foregroundStyle(Theme.mutedStone)
                         .accessibilityHint("Counts include discoverable students.")
                 }
             }

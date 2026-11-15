@@ -61,7 +61,7 @@ struct SignUpView: View {
             case .failed(let message):
                 return message
             case .confirmEmail:
-                return "We've sent a confirmation link to your university email. Open it to activate your account, then log in."
+                return "We've sent a confirmation link to your email. Open it to activate your account, then log in."
             }
         }
     }
@@ -207,7 +207,7 @@ struct SignUpView: View {
 
                     VStack(alignment: .leading, spacing: 20) {
 
-                        // MARK: University Email
+                        // MARK: Email
 
                         // MARK: Full Name
 
@@ -224,7 +224,8 @@ struct SignUpView: View {
 
                                 TextField(
                                     "Enter your full name",
-                                    text: $fullName
+                                    text: $fullName,
+                                    prompt: Text("Enter your full name").foregroundStyle(Theme.mutedStone)
                                 )
                                 .textContentType(.name)
                                 .focused($focusedField, equals: .fullName)
@@ -238,11 +239,11 @@ struct SignUpView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 16))
                         }
 
-                        // MARK: University Email
+                        // MARK: Email
 
                         VStack(alignment: .leading, spacing: 8) {
 
-                            Text("University Email")
+                            Text("Email")
                                 .font(
                                     .system(
                                         size: 14,
@@ -257,8 +258,9 @@ struct SignUpView: View {
                                     .accessibilityHidden(true)
 
                                 TextField(
-                                    "Enter your university email",
-                                    text: $email
+                                    "Enter your email",
+                                    text: $email,
+                                    prompt: Text("Enter your email").foregroundStyle(Theme.mutedStone)
                                 )
                                 .textContentType(.username)
                                 .keyboardType(.emailAddress)
@@ -447,12 +449,12 @@ struct SignUpView: View {
                                     weight: .semibold
                                 )
                             )
-                            .foregroundStyle(.white)
+                            .foregroundStyle(canSubmit || isLoading ? Color.white : Theme.mutedStone)
                             .padding(20)
                             .background(
-                                canSubmit
+                                canSubmit || isLoading
                                 ? Theme.primaryAction
-                                : Color.gray.opacity(0.5)
+                                : Theme.neutralSurface
                             )
                             .clipShape(
                                 RoundedRectangle(cornerRadius: 20)
@@ -655,12 +657,12 @@ private struct PasswordInput: View {
 
             if isVisible {
 
-                TextField(placeholder, text: $text)
+                TextField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(Theme.mutedStone))
                     .textContentType(.newPassword)
 
             } else {
 
-                SecureField(placeholder, text: $text)
+                SecureField(placeholder, text: $text, prompt: Text(placeholder).foregroundStyle(Theme.mutedStone))
                     .textContentType(.newPassword)
             }
         }

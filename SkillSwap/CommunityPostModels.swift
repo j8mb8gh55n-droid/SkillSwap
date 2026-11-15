@@ -18,9 +18,11 @@ enum CommunityPostType: String, CaseIterable, Codable, Identifiable {
 struct CommunityPostItem: Decodable, Identifiable {
     struct Author: Decodable {
         let name: String
+        let avatarURL: String?
 
         enum CodingKeys: String, CodingKey {
             case name = "full_name"
+            case avatarURL = "avatar_url"
         }
     }
 

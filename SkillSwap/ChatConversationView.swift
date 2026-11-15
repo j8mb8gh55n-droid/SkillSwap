@@ -33,12 +33,15 @@ struct ChatConversationView: View {
     @State private var acknowledgedMessage: Int64?
     @State private var openingIntroduction = false
     @State private var scrollToLatest = false
+    @State private var introductionSuggestion: String?
 
     init(conversation: ChatConversation, isPreview: Bool = false,
-         sendState: SendState = .unavailable, initialDraft: String = "", previewOwnsBlock: Bool? = nil) {
+         sendState: SendState = .unavailable, initialDraft: String = "", previewOwnsBlock: Bool? = nil,
+         introductionSuggestion: String? = nil) {
         _conversation = State(initialValue: conversation)
         _draft = State(initialValue: initialDraft)
         _ownsBlock = State(initialValue: isPreview ? previewOwnsBlock : nil)
+        _introductionSuggestion = State(initialValue: introductionSuggestion)
         self.isPreview = isPreview
         self.sendState = sendState
     }
@@ -299,8 +302,10 @@ struct ChatConversationView: View {
                         .disabled(blocking || sending)
                     }
                     HStack(alignment: .center, spacing: 4) {
-                        TextField(draftingReconnection ? "Write a reconnection request" : conversation.state == .introduction ? "Write an introduction" : "Write a message",
-                                  text: draftBinding, axis: .vertical)
+                        let prompt = draftingReconnection ? "Write a reconnection request"
+                            : conversation.state == .introduction ? "Write an introduction" : "Write a message"
+                        TextField(prompt, text: draftBinding,
+                                  prompt: Text(prompt).foregroundStyle(Theme.mutedStone), axis: .vertical)
                             .lineLimit(1...4)
                             .disabled(sending)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -392,9 +397,9 @@ struct ChatConversationView: View {
                 }
             }
             .frame(width: 36, height: 36)
-            .foregroundStyle(highlighted ? Theme.ink : Color.secondary)
+            .foregroundStyle(highlighted ? Theme.ink : Theme.mutedStone)
             .glassEffect(
-                highlighted ? .regular.tint(Theme.softMint.opacity(0.65)).interactive() : .regular,
+                highlighted ? .regular.tint(Theme.softMint.opacity(0.45)).interactive() : .regular,
                 in: .circle
             )
             .frame(width: 44, height: 44)
@@ -448,6 +453,12 @@ struct ChatConversationView: View {
             let shouldScroll = !loaded || conversation.messages.map(\.id).max() != updated.messages.map(\.id).max()
             updated.exchangeContext = conversation.exchangeContext
             conversation = updated
+            if let suggestion = introductionSuggestion {
+                introductionSuggestion = nil
+                if updated.state == .introduction && draft.isEmpty {
+                    updateDraft(suggestion)
+                }
+            }
             if !updated.canReconnect { draftingReconnection = false }
             loaded = true
             refreshError = nil
@@ -560,12 +571,12 @@ struct ChatConversationView: View {
         VStack(alignment: message.sentByMe ? .trailing : .leading, spacing: 4) {
             Text(message.text)
                 .padding(12)
-                .foregroundStyle(message.sentByMe ? Color.black.opacity(0.84) : Theme.ink)
+                .foregroundStyle(message.sentByMe ? Theme.onPastel : Theme.ink)
                 .background(message.sentByMe ? Theme.softMint : Theme.surface,
                             in: RoundedRectangle(cornerRadius: 16))
             Text(message.sentAt, format: .dateTime.hour().minute())
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.mutedStone)
         }
         .frame(maxWidth: .infinity, alignment: message.sentByMe ? .trailing : .leading)
         .padding(message.sentByMe ? .leading : .trailing, 32)

@@ -354,6 +354,7 @@ struct ExchangeDetailsView: View {
                 .frame(maxWidth: .infinity)
                 .frame(height: 280)
                 .clipped()
+                .overlay { Theme.photoScrim.allowsHitTesting(false) }
                 .mask(
                     LinearGradient(
                         stops: [
@@ -396,7 +397,7 @@ struct ExchangeDetailsView: View {
                                 .font(Theme.Typography.callout).foregroundStyle(Theme.mutedStone).lineLimit(1)
                         }
                         Text("View profile")
-                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                            .font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.ink)
                     }
                     Spacer(minLength: 0)
                     Image(systemName: "chevron.right")
@@ -512,7 +513,7 @@ struct ExchangeDetailsView: View {
     private func avatarFallback(_ size: CGFloat) -> some View {
         ZStack {
             LinearGradient(colors: exchange.bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(exchange.initials).font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(.white)
+            Text(exchange.initials).font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(Theme.onPastel)
         }
     }
 
@@ -525,7 +526,7 @@ struct ExchangeDetailsView: View {
                 skillBlock("YOU LEARN", exchange.learningSkill, symbol: "book.closed.fill",
                            tint: Theme.brightLavender)
                 Image(systemName: "arrow.left.arrow.right")
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.primaryAction)
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.ink)
                 skillBlock("YOU TEACH", exchange.offeringSkill, symbol: "lightbulb.fill",
                            tint: Theme.powderBlue)
             }
@@ -617,7 +618,7 @@ struct ExchangeDetailsView: View {
 
     private func sessionRow(_ symbol: String, _ value: String) -> some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.primaryAction).frame(width: 22)
+            Image(systemName: symbol).font(.system(size: 14)).foregroundStyle(Theme.ink).frame(width: 22)
             Text(value).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.charcoal)
             Spacer(minLength: 0)
         }
@@ -741,7 +742,7 @@ struct ExchangeDetailsView: View {
 
     private func infoCard(symbol: String, title: String, detail: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 18)).foregroundStyle(Theme.primaryAction)
+            Image(systemName: symbol).font(.system(size: 18)).foregroundStyle(Theme.ink)
                 .frame(width: 44, height: 44)
                 .background(Theme.brightLavender.opacity(0.3)).clipShape(RoundedRectangle(cornerRadius: 13))
             VStack(alignment: .leading, spacing: 4) {

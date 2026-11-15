@@ -121,7 +121,7 @@ struct ExchangeView: View {
             } label: {
                 Image(systemName: "clock.arrow.circlepath")
                     .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(Theme.primaryAction)
+                    .foregroundStyle(Theme.ink)
                     .frame(width: 44, height: 44)
                     .background(.ultraThinMaterial, in: Circle())
             }
@@ -223,7 +223,7 @@ struct ExchangeView: View {
                 .font(Theme.Typography.callout)
                 .foregroundStyle(Theme.mutedStone)
             Button("Try Again") { Task { await reload() } }
-                .tint(Theme.primaryAction)
+                .tint(Theme.ink)
                 .disabled(isRefreshing)
         }
         .multilineTextAlignment(.center)
@@ -259,7 +259,7 @@ struct ExchangeView: View {
     // MARK: - Loading / First-run empty
 
     private var loadingRow: some View {
-        HStack { Spacer(); ProgressView().tint(Theme.primaryAction); Spacer() }.padding(.vertical, 40)
+        HStack { Spacer(); ProgressView().tint(Theme.ink); Spacer() }.padding(.vertical, 40)
     }
 
     private var firstRunEmptyState: some View {
@@ -313,6 +313,7 @@ struct ExchangeDetailsContainer: View {
 // MARK: - Student-centered Exchange Card
 
 struct ExchangeCard: View {
+    @Environment(\.colorScheme) private var appearance
     let summary: ExchangeSummary
     private var url: URL? { summary.otherAvatarURL.flatMap(URL.init(string:)) }
     private var local: String? { summary.otherLocalImage }
@@ -336,6 +337,7 @@ struct ExchangeCard: View {
                     localImageName: local,
                     fallbackColors: summary.bannerColors
                 )
+                .overlay { Theme.photoScrim.allowsHitTesting(false) }
             )
             .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
             // Hit-test ONLY the visible rounded card. The background photo uses
@@ -355,7 +357,7 @@ struct ExchangeCard: View {
                     Text(summary.otherName)
                         .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.charcoal).lineLimit(1)
                     if let major = summary.otherMajor {
-                        Text(major).font(Theme.Typography.meta).foregroundStyle(Theme.charcoal.opacity(0.7)).lineLimit(1)
+                        Text(major).font(Theme.Typography.meta).foregroundStyle(Theme.photoSecondary).lineLimit(1)
                     }
                 }
                 Spacer()
@@ -373,7 +375,7 @@ struct ExchangeCard: View {
 
             HStack(spacing: 6) {
                 Text(summary.actionLabel)
-                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.primaryAction).lineLimit(1)
+                    .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.ink).lineLimit(1)
                 Spacer()
                 Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.mutedStone)
             }
@@ -382,15 +384,15 @@ struct ExchangeCard: View {
 
     private var statusChip: some View {
         Text(statusText)
-            .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.charcoal.opacity(0.75))
+            .font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.ink)
             .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(statusTint.opacity(0.5))
+            .background(statusTint.opacity(appearance == .dark ? 0.20 : 0.50))
             .clipShape(Capsule())
     }
 
     private func skillColumn(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(label).font(.system(size: 10, weight: .bold)).tracking(0.6).foregroundStyle(Theme.charcoal.opacity(0.7))
+            Text(label).font(.system(size: 10, weight: .bold)).tracking(0.6).foregroundStyle(Theme.photoSecondary)
             Text(value).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.charcoal)
                 .lineLimit(2).fixedSize(horizontal: false, vertical: true)
         }
@@ -414,7 +416,7 @@ struct ExchangeCard: View {
     private func gradientInitials(_ size: CGFloat) -> some View {
         ZStack {
             LinearGradient(colors: summary.bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(summary.otherInitials).font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(.white)
+            Text(summary.otherInitials).font(.system(size: size * 0.34, weight: .bold)).foregroundStyle(Theme.onPastel)
         }
     }
 }

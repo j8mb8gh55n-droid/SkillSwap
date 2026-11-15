@@ -41,10 +41,12 @@ struct ChatReportSheet: View {
                             Text("Select a reason").tag(nil as Reason?)
                             ForEach(Reason.allCases) { Text($0.title).tag(Optional($0)) }
                         }
-                        TextField("Additional details (optional)", text: $details, axis: .vertical)
+                        TextField("Additional details (optional)", text: $details,
+                                  prompt: Text("Additional details (optional)").foregroundStyle(Theme.mutedStone),
+                                  axis: .vertical)
                             .lineLimit(3...6)
                         if details.unicodeScalars.count > 500 {
-                            Text("Use 500 characters or fewer.").foregroundStyle(.red)
+                            Text("Use 500 characters or fewer.").foregroundStyle(Theme.validationText)
                         }
                     }
                     if !evidence.isEmpty {

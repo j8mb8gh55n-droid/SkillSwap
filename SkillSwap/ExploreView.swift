@@ -21,6 +21,7 @@ struct ExploreView: View {
 
     @EnvironmentObject private var router: AppRouter
     @EnvironmentObject private var directory: StudentDirectory
+    @Environment(\.colorScheme) private var appearance
 
     @StateObject private var matchStore = ExploreMatchStore(fetch: ProfileService().fetchMyExploreSkills)
     @State private var matchDetails: MatchDetails?
@@ -138,7 +139,7 @@ struct ExploreView: View {
         HStack(spacing: 10) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").font(.system(size: 16)).foregroundStyle(Theme.mutedStone)
-                TextField("Search skills or students", text: $filters.keyword)
+                TextField("Search skills or students", text: $filters.keyword, prompt: Text("Search skills or students").foregroundStyle(Theme.mutedStone))
                     .font(.system(size: 15))
                     .textInputAutocapitalization(.never).autocorrectionDisabled().submitLabel(.search)
                 if !filters.keyword.isEmpty {
@@ -160,7 +161,7 @@ struct ExploreView: View {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 18, weight: .medium)).foregroundStyle(Theme.ink)
                     .frame(width: 52, height: 52)
-                    .glassEffect(.clear.tint(Theme.powderBlue.opacity(0.14)), in: .rect(cornerRadius: Theme.Radius.large))
+                    .glassEffect(.regular.tint(Theme.powderBlue.opacity(0.14)), in: .rect(cornerRadius: Theme.Radius.large))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Open filters")
@@ -180,12 +181,13 @@ struct ExploreView: View {
                     } label: {
                         Text(category)
                             .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(selected ? Theme.ink : .secondary)
+                            .foregroundStyle(selected ? Theme.ink : Theme.mutedStone)
                             .padding(.horizontal, 16)
                             .padding(.vertical, 6)
                             .frame(minHeight: 44)
-                            .background(selected ? Theme.charcoal.opacity(0.12) : Theme.surface, in: Capsule())
-                            .overlay(Capsule().strokeBorder(Theme.hairline).allowsHitTesting(false))
+                            .background(selected ? Theme.neutralSurface : Theme.surface, in: Capsule())
+                            .overlay(Capsule().strokeBorder(selected ? Theme.mutedStone : Theme.hairline)
+                                .allowsHitTesting(false))
                     }
                     .buttonStyle(.plain)
                     .accessibilityAddTraits(selected ? .isSelected : [])
@@ -259,7 +261,7 @@ struct ExploreView: View {
 
             Image(systemName: skillSymbol(skill.category))
                 .font(.system(size: 54, weight: .light))
-                .foregroundStyle(Theme.onPastel.opacity(0.38))
+                .foregroundStyle(Theme.onPastel.opacity(0.5))
                 .frame(maxWidth: .infinity, minHeight: 66)
                 .accessibilityHidden(true)
 
@@ -364,7 +366,10 @@ struct ExploreView: View {
     }
 
     private func resultCard(_ student: DiscoveredStudent, match: ExploreSkillMatch?) -> some View {
-        let teachingSkill = match?.theyTeach.first ?? student.teaches.first
+        let matchingIDs = Set(match?.theyTeach.map(\.id) ?? [])
+        let prioritizedSkills = student.teaches.filter { matchingIDs.contains($0.id) } + student.teaches
+        var seen = Set<Int>()
+        let teachingSkills = Array(prioritizedSkills.filter { seen.insert($0.id).inserted }.prefix(2))
         return VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .top, spacing: 6) {
                 NavigationLink {
@@ -377,7 +382,7 @@ struct ExploreView: View {
                                 .fixedSize(horizontal: false, vertical: true)
                             if !student.major.isEmpty {
                                 Text(student.major).font(.caption)
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Theme.photoSecondary)
                                     .fixedSize(horizontal: false, vertical: true)
                             }
                             if match?.isMutual == true {
@@ -385,15 +390,7 @@ struct ExploreView: View {
                                     .font(.caption.weight(.semibold))
                                     .fixedSize(horizontal: false, vertical: true)
                                     .padding(.horizontal, 8).padding(.vertical, 4)
-                                    .glassEffect(.regular.tint(Theme.mint.opacity(0.27)), in: .capsule)
-                            }
-                            if let teachingSkill {
-                                Text(teachingSkill.name)
-                                    .font(.subheadline.weight(.semibold))
-                                    .fixedSize(horizontal: false, vertical: true)
-                                    .padding(.horizontal, 9).padding(.vertical, 5)
-                                    .background(Theme.surface, in: Capsule())
-                                    .accessibilityLabel("Teaches \(teachingSkill.name)")
+                                    .glassEffect(.regular.tint(Theme.mint.opacity(0.20)), in: .capsule)
                             }
                         }
                         Spacer(minLength: 0)
@@ -403,6 +400,10 @@ struct ExploreView: View {
                 }
                 .buttonStyle(.plain)
                 BookmarkButton(studentID: student.id, minimumTarget: 44)
+            }
+
+            if !teachingSkills.isEmpty {
+                teachingSkillRow(teachingSkills)
             }
 
             if let match, match.hasMultipleSkills {
@@ -429,13 +430,30 @@ struct ExploreView: View {
                     .clipShape(RoundedRectangle(cornerRadius: Theme.Radius.large))
                     .overlay {
                         RoundedRectangle(cornerRadius: Theme.Radius.large)
-                            .fill(Theme.warmIvory.opacity(0.64))
+                            .fill(Theme.warmIvory.opacity(appearance == .dark ? 0.71 : 0.73))
                     }
             }
             .allowsHitTesting(false)
         }
         .overlay(RoundedRectangle(cornerRadius: Theme.Radius.large).strokeBorder(Theme.hairline)
             .allowsHitTesting(false))
+    }
+
+    private func teachingSkillRow(_ skills: [CatalogSkill]) -> some View {
+        let chips = ForEach(skills) { skill in
+            Text(skill.name)
+                .font(.subheadline.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 9).padding(.vertical, 5)
+                .background(Theme.surface, in: Capsule())
+                .accessibilityLabel("Teaches \(skill.name)")
+        }
+
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) { chips }
+                .fixedSize(horizontal: true, vertical: false)
+            VStack(alignment: .leading, spacing: 6) { chips }
+        }
     }
 
     private func matchDetailsSheet(_ details: MatchDetails) -> some View {
@@ -468,7 +486,7 @@ struct ExploreView: View {
     }
 
     private var loadingState: some View {
-        HStack { Spacer(); ProgressView().tint(Theme.primaryAction); Spacer() }
+        HStack { Spacer(); ProgressView().tint(Theme.ink); Spacer() }
             .padding(.vertical, 40)
     }
 
@@ -497,7 +515,7 @@ struct ExploreView: View {
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "magnifyingglass")
-                .font(.system(size: 30)).foregroundStyle(Theme.primaryAction)
+                .font(.system(size: 30)).foregroundStyle(Theme.ink)
             Text(filters.mutualOnly ? "No mutual matches" : "No matches").font(Theme.Typography.headline).foregroundStyle(Theme.charcoal)
             Text(filters.mutualOnly
                  ? "A mutual match needs a skill you can teach each other. Try clearing filters or updating your skills."

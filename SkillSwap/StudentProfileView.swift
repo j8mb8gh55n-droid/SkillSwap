@@ -29,6 +29,7 @@ struct StudentProfileView: View {
     var discovered: DiscoveredStudent? = nil
     var returnsToConversation = false
     var communityAuthorID: UUID? = nil
+    var isOwnPublicProfile = false
 
     // MARK: - Environment
 
@@ -98,7 +99,7 @@ struct StudentProfileView: View {
         }
         .overlay(alignment: .top) { profileHeaderActions }
         .safeAreaInset(edge: .bottom) {
-            exchangeButton
+            if !isOwnPublicProfile { exchangeButton }
         }
         .toolbar(.hidden, for: .navigationBar)
         .task(id: discovered?.id) {
@@ -157,7 +158,7 @@ struct StudentProfileView: View {
     private var avatarGradientFallback: some View {
         ZStack {
             LinearGradient(colors: bannerColors, startPoint: .topLeading, endPoint: .bottomTrailing)
-            Text(initials).font(.system(size: 28, weight: .black)).foregroundStyle(.white)
+            Text(initials).font(.system(size: 28, weight: .black)).foregroundStyle(Theme.onPastel)
         }
     }
 
@@ -171,6 +172,7 @@ struct StudentProfileView: View {
             .frame(maxWidth: .infinity)
             .frame(height: 200)
             .clipped()
+            .overlay { Theme.photoScrim.allowsHitTesting(false) }
             .mask {
 
                 LinearGradient(
@@ -258,7 +260,7 @@ struct StudentProfileView: View {
 
             Text(major)
                 .font(.system(size: 15))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.mutedStone)
 
             HStack(spacing: 8) {
                 HStack(spacing: 7) {
@@ -646,7 +648,7 @@ struct StudentProfileView: View {
 extension StudentProfileView {
     /// Build from a real discovered student (preserves the existing layout;
     /// carries the real id + skills via `discovered`).
-    init(student s: DiscoveredStudent, returnsToConversation: Bool = false) {
+    init(student s: DiscoveredStudent, returnsToConversation: Bool = false, isOwnPublicProfile: Bool = false) {
         self.init(
             name: s.name,
             major: s.major,
@@ -658,7 +660,8 @@ extension StudentProfileView {
             imageURL: s.avatarURL,
             localImageName: nil,
             discovered: s,
-            returnsToConversation: returnsToConversation
+            returnsToConversation: returnsToConversation,
+            isOwnPublicProfile: isOwnPublicProfile
         )
     }
 }
